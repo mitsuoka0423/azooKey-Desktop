@@ -1,5 +1,5 @@
 public enum WindowPositioning {
-    public struct Point: Equatable {
+    public struct Point: Sendable, Equatable {
         public var x: Double
         public var y: Double
 
@@ -9,7 +9,7 @@ public enum WindowPositioning {
         }
     }
 
-    public struct Size: Equatable {
+    public struct Size: Sendable, Equatable {
         public var width: Double
         public var height: Double
 
@@ -19,7 +19,7 @@ public enum WindowPositioning {
         }
     }
 
-    public struct Rect: Equatable {
+    public struct Rect: Sendable, Equatable {
         public var origin: Point
         public var size: Size
 
@@ -108,6 +108,61 @@ public enum WindowPositioning {
         }
 
         return frame
+    }
+
+    /// 変換パネルを行の下に出すか上に出すか
+    public enum PanelPlacement: Sendable, Equatable {
+        case below
+        case above
+    }
+
+    public struct PanelFrame: Sendable, Equatable {
+        public var origin: Point
+        public var placement: PanelPlacement
+
+        public init(origin: Point, placement: PanelPlacement) {
+            self.origin = origin
+            self.placement = placement
+        }
+    }
+
+    /// 変換パネルの位置を決める。座標は AppKit と同じく左下が原点。
+    /// - Parameters:
+    ///   - anchor: 変換の始まりの行の矩形（`attributes(forCharacterIndex: 0, lineHeightRectangle:)`）
+    ///   - previousPlacement: 同じ変換の中で前回決めた上下。確定するか空になったら `nil` を渡す
+    ///   - leftInset: パネルの左端を基準点からどれだけ左に置くか
+    public static func liveConversionPanelFrame(
+        anchor: Rect,
+        panelSize: Size,
+        screenRect: Rect,
+        previousPlacement: PanelPlacement?,
+        leftInset: Double = 12,
+        gap: Double = 4
+    ) -> PanelFrame {
+        var x = anchor.minX - leftInset
+        if x + panelSize.width > screenRect.maxX {
+            x = screenRect.maxX - panelSize.width
+        }
+        if x < screenRect.minX {
+            x = screenRect.minX
+        }
+
+        let belowY = anchor.minY - gap - panelSize.height
+        // 一度上に出したら、高さが変わっても下に戻さない
+        let placement: PanelPlacement = if previousPlacement == .above || belowY < screenRect.minY {
+            .above
+        } else {
+            .below
+        }
+        var y = placement == .below ? belowY : anchor.maxY + gap
+        // 上にも入りきらないときは画面内に押し込む（仕様の未決定事項 5 が決まるまでの仮の動き）
+        if y + panelSize.height > screenRect.maxY {
+            y = screenRect.maxY - panelSize.height
+        }
+        if y < screenRect.minY {
+            y = screenRect.minY
+        }
+        return PanelFrame(origin: Point(x: x, y: y), placement: placement)
     }
 
     public static func promptWindowOrigin(
