@@ -155,7 +155,7 @@ public enum WindowPositioning {
             .below
         }
         var y = placement == .below ? belowY : anchor.maxY + gap
-        // 上にも入りきらないときは画面内に押し込む（仕様の未決定事項 5 が決まるまでの仮の動き）
+        // 上にも入りきらないときは画面内に押し込む（仕様の決定事項 5）
         if y + panelSize.height > screenRect.maxY {
             y = screenRect.maxY - panelSize.height
         }
