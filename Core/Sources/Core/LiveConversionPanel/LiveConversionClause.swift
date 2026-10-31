@@ -39,9 +39,9 @@ public extension LiveConversionClause {
             let count = max(1, clause.data.count)
             var elements = rest.prefix(count)
             rest = rest.dropFirst(count)
-            // 文節の先頭に来た句読点は、前の文節の末尾につける
+            // 文節の先頭に来た句読点は、前の文節の末尾につける。読みも表記（「、」など）で出す
             while let first = elements.first, !result.isEmpty, Self.isPunctuation(first.word) {
-                result[result.count - 1].reading += Self.hiragana(first.ruby)
+                result[result.count - 1].reading += first.word
                 result[result.count - 1].surface += first.word
                 elements = elements.dropFirst()
             }

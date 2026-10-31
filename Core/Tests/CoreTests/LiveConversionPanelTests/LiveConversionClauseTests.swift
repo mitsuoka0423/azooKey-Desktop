@@ -44,6 +44,18 @@ struct LiveConversionClauseTests {
         ])
     }
 
+    @Test("句読点は前の文節につけ、読みも表記で出す")
+    func punctuationJoinsPreviousClause() {
+        let candidate = Self.candidate([
+            Word("明日", "アシタ", Self.noun), Word("、", ",", CIDData.記号.cid), Word("橋", "ハシ", Self.noun)
+        ])
+        let clauses = LiveConversionClause.clauses(convertTarget: "あした,はし", candidate: candidate)
+        #expect(clauses == [
+            .init(reading: "あした、", surface: "明日、"),
+            .init(reading: "はし", surface: "橋")
+        ])
+    }
+
     @Test("候補が覆っていない末尾（未変換のローマ字）は変換しない文節として足す")
     func appendsUncoveredTail() {
         let candidate = Self.candidate([Word("有賀", "アリガ", Self.noun)])
