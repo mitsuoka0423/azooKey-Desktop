@@ -4,6 +4,7 @@ import SwiftUI
 
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
+    @ConfigState private var liveConversionPanel = Config.LiveConversionPanel()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
@@ -494,6 +495,8 @@ struct ConfigWindow: View {
 
             Section {
                 Toggle("ライブ変換を有効化", isOn: $liveConversion)
+                Toggle("変換パネルを使う", isOn: $liveConversionPanel)
+                    .disabled(!liveConversion)
                 HStack {
                     TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                     helpButton(
