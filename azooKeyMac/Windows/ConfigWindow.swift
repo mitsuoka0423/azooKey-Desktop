@@ -496,7 +496,7 @@ struct ConfigWindow: View {
             Section {
                 Toggle("ライブ変換を有効化", isOn: $liveConversion)
                 Toggle("変換パネルを使う", isOn: $liveConversionPanel)
-                    .disabled(!liveConversion)
+                    .disabled(!$liveConversion.wrappedValue)
                 HStack {
                     TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                     helpButton(
