@@ -110,4 +110,31 @@ struct LiveConversionClauseTests {
         ])
         #expect(clauses("arigat").last == .init(reading: "t", surface: "t"))
     }
+
+    @MainActor
+    @Test("実際の変換：途中の文節で選んだ候補は、続けて入力しても保つ")
+    func keepSelectionWhileTyping() {
+        let manager = SegmentsManager(
+            kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+            applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+            containerURL: nil,
+            context: .init(useZenzai: false)
+        )
+        manager.insertAtCursorPosition("hasinohasiwo", inputStyle: .roman2kana)
+        #expect(manager.getLiveConversionClauses().map(\.reading) == ["はしの", "はしを"])
+
+        // 最後の文節を選んで、候補リストから「箸を」を選ぶ
+        #expect(manager.handleLiveConversionPanelKey(.left) == .handled)
+        let list = manager.getLiveConversionPanelModel().candidateList?.items.map(\.text) ?? []
+        #expect(list.contains("箸を"))
+        for _ in 0..<LiveConversionPanelState.maxCandidateCount where manager.getLiveConversionClauses().last?.surface != "箸を" {
+            #expect(manager.handleLiveConversionPanelKey(.down) == .handled)
+        }
+        #expect(manager.getLiveConversionClauses().last?.surface == "箸を")
+
+        manager.insertAtCursorPosition("wataru", inputStyle: .roman2kana)
+        let clauses = manager.getLiveConversionClauses()
+        #expect(clauses.map(\.surface).joined().hasPrefix("橋の箸を"))
+        #expect(manager.getLiveConversionPanelModel().columns.last?.isTarget == true)
+    }
 }
