@@ -18,7 +18,8 @@ swiftlint --fix --format
 swiftlint --quiet --strict
 xcodebuild -project azooKeyMac.xcodeproj -scheme azooKeyMac -quiet clean archive -archivePath build/archive.xcarchive
 
-mkdir -p "${USER_IM_DIR}"
-rm -rf "${USER_IM_DIR:?}/${APP_NAME}"
-cp -R "build/archive.xcarchive/Products/Applications/${APP_NAME}" "${USER_IM_DIR}/"
+# アプリを消して置き直すと OS の入力ソースの登録が外れるので、場所はそのままで中身だけ入れ替える
+mkdir -p "${USER_IM_DIR}/${APP_NAME}"
+rsync -a --delete "build/archive.xcarchive/Products/Applications/${APP_NAME}/" "${USER_IM_DIR}/${APP_NAME}/"
 pkill -x azooKeyMac || true
+swift "${REPO_ROOT}/Tools/register_input_source.swift" "${USER_IM_DIR}/${APP_NAME}"

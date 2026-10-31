@@ -37,6 +37,8 @@ swiftlint --quiet --strict
 
 - `./install.sh`（`--dry-run` なし）は `sudo` で `/Library/Input Methods/azooKeyMac.app` を置き換える。これはユーザーが実行する
 - 開発中は `Tools/dev_install_user.sh` で `~/Library/Input Methods` に入れ直す。`/Library/Input Methods` に同じアプリが残っていると止まる
+- `~/Library/Input Methods` に初めて置いたあとは、一度ログインし直さないと入力ソースの一覧に安定して載らない
+- computer use で打ち込むときは、`type` ではなく `key` で 1 文字ずつ送る（`type` は IME を通らない）。スクリーンショットには IME のウィンドウ（変換パネル）が写らないので、表示は `CGWindowListCopyWindowInfo` などで確かめる
 - 段階の作業が終わったら、ユーザーに「`./install.sh` を実行して、次の点を試してほしい」と、確認項目を箇条書きで伝える
 - CI（`.github/workflows/swift.yml`）は macOS で `Core` とアプリのテスト、Ubuntu で `Core` のテストを回す。Ubuntu では Zenzai が無効になる点に注意する（`Core/Package.swift`）
 
