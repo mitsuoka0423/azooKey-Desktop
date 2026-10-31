@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ライブ変換UI モックアップ</title>
+<style>
+:root{--bg:#f4f3ef;--win:#ffffff;--bar:#ecebe6;--text:#1c1c1a;--sub:#5f5e5a;--muted:#77766f;--line:#d6d4cc;--accent:#185fa5;--accentbg:#e6f1fb;--warn:#854f0b;--warnbg:#faeeda;--panel:#ffffff;--chip:#f1efe8;--shadow:0 6px 20px rgba(0,0,0,.12),0 1px 3px rgba(0,0,0,.08)}
+@media (prefers-color-scheme: dark){:root{--bg:#191918;--win:#232322;--bar:#2c2c2a;--text:#ecebe6;--sub:#b4b2a9;--muted:#9a9890;--line:#3d3d3a;--accent:#85b7eb;--accentbg:#0c2c4c;--warn:#fac775;--warnbg:#412402;--panel:#2e2e2c;--chip:#383836;--shadow:0 6px 20px rgba(0,0,0,.5)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 20px 48px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px}
+@media (max-width:860px){.wrap{grid-template-columns:minmax(0,1fr)}}
+h1{font-size:20px;font-weight:600;margin:0 0 4px}
+.lead{font-size:14px;color:var(--sub);margin:0 0 16px}
+.win{background:var(--win);border:1px solid var(--line);border-radius:10px;overflow:visible}
+.bar{height:32px;background:var(--bar);border-bottom:1px solid var(--line);border-radius:10px 10px 0 0;display:flex;align-items:center;gap:7px;padding:0 12px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--line)}
+.bar span.t{font-size:12px;color:var(--muted);margin-left:8px}
+.ed{position:relative;min-height:300px;padding:20px 22px;font-size:17px;outline:none;cursor:text}
+.ed:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);border-radius:0 0 10px 10px}
+.prev{white-space:pre-wrap;color:var(--text)}
+.line{white-space:pre-wrap;min-height:1.6em}
+.seg{background-image:linear-gradient(var(--sub),var(--sub));background-repeat:no-repeat;background-size:calc(100% - 4px) 1px;background-position:2px 100%;padding-bottom:1px}
+.seg.tgt{background-image:linear-gradient(var(--text),var(--text));background-size:calc(100% - 4px) 2.5px}
+.base .seg{background-size:100% 1px;background-position:0 100%}
+.base .seg.tgt{background-size:calc(100% - 4px) 2.5px;background-position:2px 100%}
+.pend{background-image:linear-gradient(var(--sub),var(--sub));background-repeat:no-repeat;background-size:100% 1px;background-position:0 100%}
+.caret{display:inline-block;width:1.5px;height:1.15em;background:var(--accent);vertical-align:-0.18em;margin-left:1px;animation:blink 1.05s steps(1) infinite}
+.ed:not(:focus) .caret{opacity:0;animation:none}
+@keyframes blink{50%{opacity:0}}
+.ed.nb{height:420px;display:flex;flex-direction:column;justify-content:flex-end;border-bottom:2px dashed var(--warn)}
+.nbl{display:none;position:absolute;right:10px;bottom:4px;font-size:11px;color:var(--warn)}
+.ed.nb .nbl{display:block}
+.hint-over{position:absolute;inset:auto 0 16px 0;text-align:center;font-size:13px;color:var(--muted);pointer-events:none}
+.ed:focus .hint-over{display:none}
+.panel{position:absolute;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);padding:9px 10px 8px;min-width:240px;max-width:360px;font-size:14px}
+.panel[hidden]{display:none}
+.chips{display:flex;flex-wrap:wrap;gap:3px;align-items:flex-end}
+.chip{display:flex;flex-direction:column;align-items:center;padding:2px 7px 3px;border-radius:5px;position:relative}
+.chip .rd{font-size:11px;color:var(--muted);line-height:1.3}
+.chip .sf{font-size:15px;line-height:1.35}
+.chip.tgt{background:var(--accentbg)}
+.chip.tgt .rd,.chip.tgt .sf{color:var(--accent)}
+.chip.low:not(.tgt){background:var(--warnbg)}
+.chip.low:not(.tgt) .rd,.chip.low:not(.tgt) .sf{color:var(--warn)}
+.sep{height:1px;background:var(--line);margin:8px 0 6px}
+.ctitle{font-size:11px;color:var(--muted);margin:0 0 4px 2px}
+.cands{display:grid;grid-template-columns:minmax(0,1fr);gap:1px;max-width:220px}
+.cand{display:flex;gap:8px;align-items:center;padding:4px 7px;border-radius:5px;cursor:default;font-size:15px;border:0;background:none;color:var(--text);font-family:inherit;text-align:left}
+.cand:hover{background:var(--chip)}
+.cand.on{background:var(--accent);color:var(--win)}
+.cand.on kbd{color:var(--win);opacity:.85}
+kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted);min-width:18px}
+.more{display:flex;gap:8px;align-items:center;width:100%;max-width:220px;padding:4px 7px;margin-top:2px;border:0;border-radius:5px;background:none;color:var(--sub);font:inherit;font-size:12.5px;text-align:left;cursor:default}
+.more:hover{background:var(--chip)}
+.foot{font-size:11px;color:var(--muted);margin-top:6px;border-top:1px solid var(--line);padding-top:5px}
+.panel.lk-list{min-width:150px;padding:4px}
+.panel.lk-list .cands{grid-template-columns:minmax(0,1fr)}
+.status{font-size:12px;color:var(--muted);padding:8px 22px 12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 16px}
+.toast{min-height:20px;font-size:13px;color:var(--warn);margin-top:10px}
+aside{display:flex;flex-direction:column;gap:14px}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:10px 14px 12px;margin:0;background:var(--win)}
+legend{font-size:13px;font-weight:600;padding:0 4px}
+label{display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0;cursor:pointer}
+label small{display:block;color:var(--muted);font-size:11.5px;line-height:1.4}
+input[type=radio]{margin-top:4px}
+button.reset{font:inherit;font-size:13px;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--win);color:var(--text);cursor:pointer}
+button.reset:hover{background:var(--chip)}
+.keys{font-size:12.5px;color:var(--sub);display:grid;grid-template-columns:auto 1fr;gap:3px 10px}
+.keys kbd{font-size:12px;color:var(--text)}
+.mobile-note{display:none;font-size:13px;color:var(--warn);margin-bottom:10px}
+@media (hover:none){.mobile-note{display:block}}
+
+.panel{background:color-mix(in srgb,var(--panel) 90%,transparent);-webkit-backdrop-filter:blur(22px) saturate(1.6);backdrop-filter:blur(22px) saturate(1.6);border:0.5px solid var(--line);border-radius:11px;box-shadow:0 12px 32px rgba(0,0,0,.13),0 2px 6px rgba(0,0,0,.06)}
+.panel.in{animation:pin .12s ease-out}
+@keyframes pin{from{opacity:0;transform:translateY(-3px)}}
+.cand{transition:background-color .06s}
+.cand .w{min-width:4.5em}
+.strip{display:inline-flex;align-items:stretch;border:0.5px solid var(--line);border-radius:7px;overflow:hidden;background:var(--win)}
+.col{display:flex;flex-direction:column;align-items:center;padding:5px 11px 6px;border-left:0.5px solid var(--line);min-width:38px;position:relative}
+.col:first-child{border-left:0}
+.col .rd{font-size:11px;color:var(--muted);letter-spacing:.06em;line-height:1.4}
+.col .sf{font-size:16px;line-height:1.4}
+.col.tgt{background:var(--accentbg)}
+.col.tgt::before{content:'';position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent)}
+.col.tgt .rd,.col.tgt .sf{color:var(--accent)}
+.col.low:not(.tgt) .rd::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--warn);margin-left:4px;vertical-align:2px}
+.panel.lk-strip{max-width:520px;padding:8px}
+.hang{margin-top:8px;width:200px;position:relative;border:0.5px solid var(--line);border-radius:8px;padding:3px;background:var(--win)}
+.hang::before,.hang::after{content:'';position:absolute;width:0;height:0;border-style:solid;border-color:transparent;border-top-width:0}
+.hang::before{top:-7px;left:calc(var(--nx,20px) - 7px);border-width:0 7px 7px;border-bottom-color:var(--line)}
+.hang::after{top:-6px;left:calc(var(--nx,20px) - 6px);border-width:0 6px 6.5px;border-bottom-color:var(--win)}
+.hang .more{max-width:none}
+.panel.lk-dict{width:300px;max-width:none;padding:0;overflow:hidden}
+.crumb{font-size:12px;color:var(--muted);padding:9px 14px 0;display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.crumb i{font-style:normal;opacity:.6}
+.crumb b{color:var(--accent);font-weight:600}
+.crumb .lw{color:var(--warn)}
+.dhead{display:flex;align-items:baseline;justify-content:space-between;padding:2px 14px 9px;border-bottom:0.5px solid var(--line)}
+.dhead .big{font-size:21px;letter-spacing:.08em}
+.dhead .cnt{font-size:11px;color:var(--muted)}
+.panel.lk-dict .cands{max-width:none;padding:5px}
+.cand .an{margin-left:auto;font-size:12px;color:var(--muted);padding-left:10px}
+.cand.on .an{color:var(--win);opacity:.85}
+.panel.lk-dict .more{max-width:none;margin:0 5px 5px;width:calc(100% - 10px)}
+.panel.lk-dict .foot{margin:0;padding:7px 14px;border-top:0.5px solid var(--line)}
+.panel.lk-attach,.panel.lk-list{padding:4px;min-width:0}
+.panel.lk-attach .cands,.panel.lk-list .cands{max-width:none;min-width:140px}
+.panel.lk-attach .more{max-width:none}
+#ruby{position:absolute;inset:0;pointer-events:none;z-index:4}
+.rb{position:absolute;box-sizing:border-box;display:flex;justify-content:center;overflow:hidden;padding:3px 0 !important;font-size:11px;line-height:1;padding:3px 6px;border-radius:5px;color:var(--sub);background:color-mix(in srgb,var(--win) 88%,transparent);border:0.5px solid var(--line);white-space:nowrap;letter-spacing:.05em}
+.rb.tgt{background:var(--accent);color:var(--win);border-color:var(--accent)}
+.rb.low:not(.tgt){color:var(--warn);background:var(--warnbg);border-color:transparent}
+.rb{background:var(--win)}
+.rt{display:inline-block;white-space:nowrap;transform-origin:center;letter-spacing:0}
+
+.panel.lk-strip2{padding:7px 7px 6px;max-width:560px}
+.lk-strip2 .strip{border:0;border-radius:6px;background:transparent}
+.lk-strip2 .col{padding:3px 10px 5px;border-left:0.5px solid var(--line)}
+.lk-strip2 .col:first-child{border-left:0}
+.lk-strip2 .col .rd{font-size:14px;color:var(--text);letter-spacing:.04em;line-height:1.5}
+.lk-strip2 .col .sf{font-size:11px;color:var(--muted);line-height:1.3}
+.lk-strip2 .col.tgt{background:var(--accentbg);border-radius:6px}
+.lk-strip2 .col.tgt,.lk-strip2 .col.tgt+.col{border-left-color:transparent}
+.lk-strip2 .col.tgt::before{display:none}
+.lk-strip2 .col.tgt .rd{color:var(--accent);font-weight:600}
+.lk-strip2 .col.tgt .sf{color:var(--accent)}
+.lk-strip2.sf-tgt .col:not(.tgt) .sf{visibility:hidden}
+.lk-strip2 .col.low:not(.tgt) .rd{color:var(--warn)}
+.lk-strip2 .col.low:not(.tgt) .rd::after{content:none}
+.lk-strip2 .col.low:not(.tgt){box-shadow:inset 0 -2px 0 var(--warn)}
+.lk-strip2 .hang{width:fit-content;min-width:200px;max-width:300px;margin-top:7px;display:block}
+.lk-strip2 .hang .cands{max-width:none}
+.lk-strip2 .foot{border-top:0;margin-top:4px;padding-top:0;text-align:right}
+</style>
+</head>
+<body>
+<div class="wrap">
+<main>
+  <h1>ライブ変換UI モックアップ</h1>
+  <p class="lead">エディタをクリックして好きなキーを押すと、決め打ちの文「あした、はしのはしをわたる」をローマ字で1文字ずつ入力します。OSの入力は英数にしてください。</p>
+  <p class="mobile-note">キーボードを使うプロトタイプです。パソコンで開いてください。</p>
+  <div class="win">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">メモ</span></div>
+    <div class="ed" id="ed" tabindex="0" aria-label="入力エリア">
+      <div class="prev" id="prev"></div>
+      <div class="line" id="line"></div>
+      <div id="ruby" aria-hidden="true"></div>
+      <div class="panel" id="panel" hidden></div>
+      <div class="nbl">画面の下端（想定）</div>
+      <div class="hint-over">クリックして入力を始める</div>
+    </div>
+    <div class="status" id="status"></div>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+</main>
+<aside>
+  <fieldset>
+    <legend>見た目</legend>
+    <label><input type="radio" name="look" value="strip2" checked><span>A 改善案<small>読みを主役にして、変換結果は控えめに。候補に意味の手がかり</small></span></label>
+    <label><input type="radio" name="look" value="strip"><span>A 対訳型<small>読みと区切りの確認を最優先。候補は対象の列の真下に下がる</small></span></label>
+    <label><input type="radio" name="look" value="dict"><span>B 辞書型<small>同音異義語の選び分けを最優先。候補ごとに意味の手がかり</small></span></label>
+    <label><input type="radio" name="look" value="attach"><span>C 吸着型<small>視線移動を最小に。読みと候補を文節のすぐ横（同じ側）に出す</small></span></label>
+    <label><input type="radio" name="look" value="base"><span>いまの案<small>比較用</small></span></label>
+  </fieldset>
+  <fieldset>
+    <legend>A 改善案の設定</legend>
+    <p style="font-size:12px;color:var(--sub);margin:0 0 4px">パネル内の変換結果</p>
+    <label><input type="radio" name="sf" value="quiet" checked><span>小さく薄く出す</span></label>
+    <label><input type="radio" name="sf" value="tgt"><span>対象の列だけ出す</span></label>
+    <label><input type="radio" name="sf" value="none"><span>出さない（読みだけ）</span></label>
+    <label style="margin-top:4px"><input type="checkbox" name="an" checked><span>候補に意味の手がかりを付ける</span></label>
+  </fieldset>
+  <fieldset>
+    <legend>パネルを出すタイミング</legend>
+    <label><input type="radio" name="panel" value="always" checked><span>常に表示<small>未確定の文字がある間ずっと</small></span></label>
+    <label><input type="radio" name="panel" value="lowconf"><span>自信が低い文節があるときだけ<small>黄色の文節が残っている間</small></span></label>
+    <label><input type="radio" name="panel" value="select"><span>文節を選んだときだけ<small>← → か Space を押したとき</small></span></label>
+    <label><input type="radio" name="panel" value="off"><span>なし（従来型と比較）<small>区切りは隠れる。Space で縦の候補リスト</small></span></label>
+  </fieldset>
+  <fieldset>
+    <legend>入力が止まってから出すまで</legend>
+    <label><input type="radio" name="delay" value="0" checked><span>すぐ</span></label>
+    <label><input type="radio" name="delay" value="400"><span>0.4秒</span></label>
+    <label><input type="radio" name="delay" value="800"><span>0.8秒</span></label>
+  </fieldset>
+  <fieldset>
+    <legend>パネルの位置</legend>
+    <p style="font-size:12.5px;color:var(--sub);margin:0 0 6px">原則は行の下。画面の下端で入りきらないときだけ行の上に出します。</p>
+    <label><input type="checkbox" name="nb" id="nb"><span>画面の下端の近くで試す<small>入力行を想定した下端のすぐ上に置きます</small></span></label>
+  </fieldset>
+  <fieldset>
+    <legend>候補を選ぶキー</legend>
+    <label><input type="radio" name="key" value="digit" checked><span>数字キー</span></label>
+    <label><input type="radio" name="key" value="alt"><span>Option＋数字<small>数字だけだと文中に入る想定</small></span></label>
+  </fieldset>
+  <fieldset>
+    <legend>キー操作</legend>
+    <div class="keys">
+      <kbd>文字キー</kbd><span>次のローマ字を入力</span>
+      <kbd>← →</kbd><span>文節を移動</span>
+      <kbd>⇧← →</kbd><span>区切りを縮める・伸ばす</span>
+      <kbd>↑ ↓ / Space</kbd><span>候補を切り替え</span>
+      <kbd>1–9</kbd><span>候補を直接選ぶ</span>
+      <kbd>Tab</kbd><span>ほかの候補を広げる・たたむ</span>
+      <kbd>Esc</kbd><span>対象の文節を読みに戻す</span>
+      <kbd>Delete</kbd><span>1文字消す</span>
+      <kbd>Enter</kbd><span>確定</span>
+    </div>
+  </fieldset>
+  <button class="reset" id="reset" type="button">最初からやり直す</button>
+</aside>
+</div>
+<script>
+const TOK=[['あ','a'],['し','shi'],['た','ta'],['、',','],['は','ha'],['し','shi'],['の','no'],['は','ha'],['し','shi'],['を','wo'],['わ','wa'],['た','ta'],['る','ru']];
+const ROMA=TOK.map(t=>t[1]).join('');
+const ENDS=[];{let a=0;for(const t of TOK){a+=t[1].length;ENDS.push(a);}}
+const STAGES={1:['あ'],2:['あし'],3:['あした'],4:['あした、'],5:['あした、','は'],6:['あした、','はし'],7:['あした、','はしの'],8:['あした、','はしの','は'],9:['あした、','はしの','はし'],10:['あした、','はしの','はしを'],11:['あした、','はしの','はしを','わ'],12:['あした、','はしの','はしを','わた'],13:['あした、','はしの','はしを','わたる']};
+const DICT={'あ':['あ','亜'],'あし':['足','脚','葦'],'あした':['明日','あした'],'あした、':['明日、','あした、'],'あし、':['足、'],'した、':['下、','した、'],'た、':['田、','た、'],'、':['、'],'、は':['、は'],'は':['は','葉','歯'],'はし':['箸','橋','端','はし','ハシ','嘴','梯','土師'],'はしの':['橋の','箸の','端の','はしの','ハシの','嘴の','梯の'],'しの':['しの','篠'],'の':['の','野'],'のは':['のは'],'のはし':['の端','の橋','の箸'],'はしのは':['橋のは'],'はしのはし':['橋の端','橋の箸','橋の橋'],'はしを':['箸を','端を','橋を','はしを','ハシを','嘴を','梯を','土師を'],'しを':['詩を','しを'],'を':['を'],'をわたる':['を渡る'],'をわ':['をわ'],'はしをわ':['端をわ'],'はしをわたる':['端を渡る','箸を渡る','橋を渡る'],'わ':['わ','輪','和'],'わた':['綿','わた'],'わたる':['渡る','わたる','ワタル','亘る','亙る'],'たる':['樽','たる'],'る':['る'],'しのは':['しのは'],'はしのはしを':['橋の端を','橋の箸を']};
+const LOW=new Set(['あし','はし','はしを','はしのはし','わた','はしのはしを','はしをわたる']);
+const kata=s=>s.replace(/[ぁ-ゖ]/g,c=>String.fromCharCode(c.charCodeAt(0)+0x60));
+function candsFor(r){const c=(DICT[r]||[r]).slice();if(!c.includes(r))c.push(r);const k=kata(r);if(k!==r&&!c.includes(k))c.push(k);return c.slice(0,9);}
+const mk=r=>({r,c:candsFor(r),sel:0,user:false,exp:false});
+const SHOWN=4;
+const ANNO={'端':'物のへり・すみ','箸':'食事の道具','橋':'川などに架ける','嘴':'鳥のくちばし','梯':'はしご','土師':'姓・古代の職名','明日':'今日の次の日','足':'体のあし','脚':'机などのあし','葦':'水辺の植物','渡る':'向こう側へ行く','亘る':'期間・範囲に及ぶ','亙る':'「亘る」の異体字','綿':'もめんわた','輪':'円形のもの','和':'なごやか・日本','葉':'植物の葉','歯':'口の中の歯','野':'野原','篠':'細い竹','詩':'ポエム','下':'下のほう','舌':'口の中の舌','田':'たんぼ','樽':'酒などの容器','亜':'次ぐもの'};
+function anno(c,r){if(c===r)return 'ひらがな';if(c===kata(r))return 'カタカナ';const core=c.replace(/[ぁ-ゖ、]+$/,'');if(ANNO[core])return ANNO[core];if(/^[ァ-ー]+$/.test(core))return 'カタカナ';return '';}
+
+const S={look:'strip2',sf:'quiet',an:true,panel:'always',delay:0,nb:false,key:'digit'};let side=null,wasVis=false;
+let n=0,segs=[],mode='typing',focus=0,listOpen=false,lastType=0,timer=null;
+const prevLines=['来週の予定を共有します。'];let cur='';
+
+const $=id=>document.getElementById(id);
+const ed=$('ed'),prevEl=$('prev'),lineEl=$('line'),panel=$('panel'),statusEl=$('status'),toastEl=$('toast');
+
+const kanaCount=()=>ENDS.filter(e=>e<=n).length;
+const pending=()=>{const k=kanaCount();return ROMA.slice(k?ENDS[k-1]:0,n);};
+const disp=s=>s.c[s.sel];
+const isLow=s=>LOW.has(s.r)&&!s.user;
+function target(){if(!segs.length)return -1;if(mode==='select')return focus;let i=-1;segs.forEach((s,j)=>{if(isLow(s))i=j;});return i>=0?i:segs.length-1;}
+
+function rebuild(){const k=kanaCount();const rs=k?STAGES[k]:[];const old=segs;segs=rs.map((r,i)=>{const o=old[i];return(o&&o.r===r&&o.user)?o:mk(r);});}
+let toastT=null;function toast(m){toastEl.textContent=m;clearTimeout(toastT);toastT=setTimeout(()=>toastEl.textContent='',2200);}
+
+function typeNext(){if(n>=ROMA.length){toast('決め打ちの文はここまでです。Enter で確定します。');return;}n++;mode='typing';listOpen=false;rebuild();lastType=Date.now();schedule();}
+function back(){if(!n)return;if(pending().length)n--;else{const k=kanaCount();n=k>=2?ENDS[k-2]:0;}mode='typing';listOpen=false;rebuild();lastType=Date.now();schedule();}
+function dropPending(){const k=kanaCount();n=k?ENDS[k-1]:0;}
+function enterSelect(at){dropPending();mode='select';focus=Math.max(0,Math.min(segs.length-1,at));}
+function move(d){listOpen=false;if(mode==='typing'){enterSelect(d<0?segs.length-1:0);}else{focus=Math.max(0,Math.min(segs.length-1,focus+d));}}
+function resize(d){if(mode==='typing')enterSelect(segs.length-1);const s=segs[focus],nx=segs[focus+1];
+  if(d<0){if(s.r.length<=1)return;const ch=s.r.slice(-1);segs[focus]=mk(s.r.slice(0,-1));if(nx)segs[focus+1]=mk(ch+nx.r);else segs.splice(focus+1,0,mk(ch));}
+  else{if(!nx)return;segs[focus]=mk(s.r+nx.r[0]);const rest=nx.r.slice(1);if(rest)segs[focus+1]=mk(rest);else segs.splice(focus+1,1);}
+  listOpen=false;}
+function cycle(d){const t=target();if(t<0)return;const s=segs[t];const lim=(s.exp||S.panel==='off')?s.c.length:Math.min(SHOWN,s.c.length);
+  if(!s.exp&&s.c.length>SHOWN&&d>0&&s.sel===lim-1){s.exp=true;s.sel=lim;s.user=true;return;}
+  s.sel=(s.sel+d+lim)%lim;s.user=true;}
+function toggleExp(){const t=target();if(t<0)return;const s=segs[t];if(s.c.length<=SHOWN)return;s.exp=!s.exp;if(!s.exp&&s.sel>=SHOWN){s.sel=0;}}
+function pick(i){const t=target();if(t<0)return;const s=segs[t];if(i>=s.c.length)return;s.sel=i;s.user=true;if(S.panel==='off')listOpen=false;}
+function revert(){const t=target();if(t<0)return;const s=segs[t];let i=s.c.indexOf(s.r);if(i<0){s.c.push(s.r);i=s.c.length-1;}s.sel=i;s.user=true;}
+function commit(){cur+=segs.map(disp).join('')+pending();n=0;segs=[];mode='typing';listOpen=false;}
+function schedule(){clearTimeout(timer);if(S.delay>0)timer=setTimeout(render,S.delay+15);}
+
+function panelVisible(){
+  if(!segs.length)return false;
+  if(S.panel==='off')return mode==='select'&&listOpen;
+  if(mode==='select')return true;
+  if(S.panel==='select')return false;
+  if(S.panel==='lowconf'&&!segs.some(isLow))return false;
+  return Date.now()-lastType>=S.delay;
+}
+const keyLabel=i=>(S.key==='alt'?'⌥':'')+(i+1);
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function render(){
+  if(!segs.length)side=null;
+  ed.classList.toggle('nb',S.nb);
+  prevEl.textContent=prevLines.join('\n');
+  const vis=panelVisible(),t=target();
+  const showTgt=S.panel==='off'?mode==='select':vis;
+  lineEl.className='line'+(S.panel==='off'?' base':'');
+  let h=esc(cur)+'<span id="cstart"></span>';
+  segs.forEach((s,i)=>{h+='<span class="seg'+(showTgt&&i===t?' tgt':'')+'" data-i="'+i+'">'+esc(disp(s))+'</span>';});
+  const p=pending();if(p)h+='<span class="pend">'+esc(p)+'</span>';
+  h+='<span class="caret" aria-hidden="true"></span>';
+  lineEl.innerHTML=h;
+
+  const ruby=$('ruby');ruby.innerHTML='';
+  if(!vis){panel.hidden=true;wasVis=false;}else{
+    const s=segs[t],L=S.panel==='off'?'list':S.look;
+    const list=(s.exp||L==='list')?s.c:s.c.slice(0,SHOWN);
+    const withAn=L==='dict'||(L==='strip2'&&S.an);
+    const cands='<div class="cands">'+list.map((c,i)=>'<button type="button" class="cand'+(i===s.sel?' on':'')+'" data-p="'+i+'"><kbd>'+keyLabel(i)+'</kbd><span class="w">'+esc(c)+'</span>'+(withAn?'<span class="an">'+esc(anno(c,s.r))+'</span>':'')+'</button>').join('')+'</div>';
+    const more=(L!=='list'&&s.c.length>SHOWN)?'<button type="button" class="more" data-more="1"><kbd>Tab</kbd>'+(s.exp?'候補をたたむ':'ほかの候補 '+(s.c.length-SHOWN)+' 件')+'</button>':'';
+    const foot='<div class="foot">← → 文節　⇧← → 区切り　Tab 広げる　Esc 読みに戻す　Enter 確定</div>';
+    let ph='';
+    if(L==='list'){ph=cands;}
+    else if(L==='base'){
+      ph='<div class="chips">'+segs.map((x,i)=>'<div class="chip'+(i===t?' tgt':'')+(isLow(x)?' low':'')+'"><span class="rd">'+esc(x.r)+'</span><span class="sf">'+esc(disp(x))+'</span></div>').join('')+'</div>';
+      ph+='<div class="sep"></div><div class="ctitle">「'+esc(s.r)+'」の候補</div>'+cands+more+foot;
+    }else if(L==='strip'){
+      ph='<div class="strip">'+segs.map((x,i)=>'<div class="col'+(i===t?' tgt':'')+(isLow(x)?' low':'')+'" data-col="'+i+'"><span class="rd">'+esc(x.r)+'</span><span class="sf">'+esc(disp(x))+'</span></div>').join('')+'</div>';
+      ph+='<div class="hang" id="hang">'+cands+more+'</div>'+foot;
+    }else if(L==='strip2'){
+      ph='<div class="strip">'+segs.map((x,i)=>'<div class="col'+(i===t?' tgt':'')+(isLow(x)?' low':'')+'" data-col="'+i+'"><span class="rd">'+esc(x.r)+'</span>'+(S.sf==='none'?'':'<span class="sf">'+esc(disp(x))+'</span>')+'</div>').join('')+'</div>';
+      ph+='<div class="hang" id="hang">'+cands+more+'</div><div class="foot">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>';
+    }else if(L==='dict'){
+      ph='<div class="crumb">'+segs.map((x,i)=>i===t?'<b>'+esc(disp(x))+'</b>':'<span'+(isLow(x)?' class="lw"':'')+'>'+esc(disp(x))+'</span>').join('<i>›</i>')+'</div>';
+      ph+='<div class="dhead"><span class="big">'+esc(s.r)+'</span><span class="cnt">候補 '+s.c.length+' 件</span></div>'+cands+more+'<div class="foot">← → 文節　Tab 広げる　Esc 読みに戻す　Enter 確定</div>';
+    }else{
+      ph=cands+more;
+    }
+    panel.className='panel lk-'+L+(L==='strip2'?' sf-'+S.sf:'')+(wasVis?'':' in');wasVis=true;
+    panel.innerHTML=ph;panel.hidden=false;
+    if(L==='strip'||L==='strip2'){const col=panel.querySelector('[data-col="'+t+'"]'),hang=$('hang');hang.style.marginLeft=(col.offsetLeft-parseFloat(getComputedStyle(panel).paddingLeft))+'px';hang.style.setProperty('--nx',Math.min(col.offsetWidth/2,40)+'px');}
+    const er=ed.getBoundingClientRect();
+    const tgtEl=lineEl.querySelector('.seg[data-i="'+t+'"]');
+    const anchor=(L==='base'||L==='strip'||L==='strip2')?($('cstart').nextElementSibling||$('cstart')):tgtEl;
+    const ar=anchor.getBoundingClientRect();
+    const lr=tgtEl.getBoundingClientRect();
+    const off=L==='attach'?-4:L==='list'?-6:L==='dict'?-14:-12;
+    let left=ar.left-er.left+off;const maxL=er.width-panel.offsetWidth-8;left=Math.max(8,Math.min(left,maxL));
+    panel.style.left=left+'px';
+    const gap=L==='attach'?3:6,extra=L==='attach'?24:0;
+    const pH=panel.offsetHeight,bound=S.nb?er.bottom:window.innerHeight,topBound=S.nb?er.top:0;
+    const fitsBelow=lr.bottom+gap+extra+pH<=bound-4,fitsAbove=lr.top-gap-extra-pH>=topBound+4;
+    if(!side)side=(fitsBelow||!fitsAbove)?'below':'above';
+    else if(side==='below'&&!fitsBelow&&fitsAbove)side='above';
+    panel.style.top=(side==='below'?lr.bottom-er.top+gap+extra:lr.top-er.top-pH-gap-extra)+'px';
+    if(L==='attach'){
+      ruby.innerHTML=segs.map((x,i)=>{const r=lineEl.querySelector('.seg[data-i="'+i+'"]').getBoundingClientRect();
+        const top=side==='below'?r.bottom-er.top+3:r.top-er.top-23;
+        return '<span class="rb'+(i===t?' tgt':'')+(isLow(x)?' low':'')+'" style="left:'+(r.left-er.left+2)+'px;width:'+Math.max(10,r.width-4)+'px;top:'+top+'px"><span class="rt">'+esc(x.r)+'</span></span>';}).join('');
+      ruby.querySelectorAll('.rb').forEach(el=>{const t=el.firstChild,avail=el.clientWidth-4;let fs=11;t.style.fontSize=fs+'px';
+        while(t.offsetWidth>avail&&fs>9){fs-=0.5;t.style.fontSize=fs+'px';}
+        if(t.offsetWidth>avail)t.style.transform='scaleX('+(avail/t.offsetWidth).toFixed(3)+')';
+        else if(t.textContent.length>1){const sp=Math.min(6,(avail-t.offsetWidth)/(t.textContent.length));t.style.letterSpacing=sp.toFixed(2)+'px';t.style.marginRight=(-sp).toFixed(2)+'px';}});
+    }
+  }
+  const modeTxt=!segs.length&&!p?'待機中':(mode==='select'?'文節を選択中':'入力中');
+  statusEl.innerHTML='<span>状態：'+modeTxt+'</span><span>対象の文節：'+(t>=0?esc(segs[t].r):'—')+'</span><span>パネル：'+(vis?(side==='above'?'行の上':'行の下'):'—')+'</span><span>未変換のローマ字：'+(p?esc(p):'—')+'</span>';
+}
+
+ed.addEventListener('keydown',e=>{
+  if(e.isComposing||e.key==='Process'||e.keyCode===229){toast('OSの入力を英数に切り替えてください。');return;}
+  if(e.metaKey||e.ctrlKey)return;
+  const k=e.key,has=segs.length>0||pending().length>0;
+  if(k==='Tab'){if(segs.length&&S.panel!=='off'){e.preventDefault();if(!panelVisible())enterSelect(target());toggleExp();render();}return;}
+  if(k==='Enter'){e.preventDefault();if(has)commit();else{prevLines.push(cur);cur='';}render();return;}
+  if(k==='Backspace'||k==='Delete'){e.preventDefault();if(n)back();render();return;}
+  if(k==='Escape'){e.preventDefault();if(segs.length)revert();render();return;}
+  if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();if(!segs.length)return;const d=k==='ArrowLeft'?-1:1;if(e.shiftKey)resize(d);else move(d);render();return;}
+  if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();if(!segs.length)return;if(S.panel==='off'){if(mode==='typing')enterSelect(segs.length-1);listOpen=true;}cycle(k==='ArrowDown'?1:-1);render();return;}
+  if(k===' '){e.preventDefault();if(!segs.length)return;if(mode==='typing'&&(S.panel==='select'||S.panel==='off'))enterSelect(target());if(S.panel==='off'){if(listOpen)cycle(1);listOpen=true;}else cycle(1);render();return;}
+  const m=(e.code||'').match(/^Digit([1-9])$/);
+  if(m&&segs.length){
+    const want=S.key==='digit'?!e.altKey:e.altKey;
+    const shown=panelVisible();
+    if(want&&shown){e.preventDefault();pick(+m[1]-1);render();return;}
+    if(want&&!shown){e.preventDefault();toast('パネルが出ていないので、数字は文中に入力される想定です。');return;}
+    if(S.key==='alt'&&!e.altKey){e.preventDefault();toast('数字は文中に入力される想定です。');return;}
+  }
+  if(k.length===1&&!e.altKey){e.preventDefault();typeNext();render();return;}
+});
+panel.addEventListener('mousedown',e=>{e.preventDefault();if(e.target.closest('[data-more]')){toggleExp();render();return;}const b=e.target.closest('[data-p]');if(b){pick(+b.dataset.p);render();}});
+ed.addEventListener('mousedown',()=>setTimeout(()=>ed.focus(),0));
+document.querySelectorAll('aside input').forEach(inp=>inp.addEventListener('change',()=>{S[inp.name]=inp.type==='checkbox'?inp.checked:inp.name==='delay'?+inp.value:inp.value;side=null;listOpen=false;render();ed.focus();}));
+$('reset').addEventListener('click',()=>{n=0;segs=[];mode='typing';listOpen=false;cur='';prevLines.length=1;render();ed.focus();});
+window.addEventListener('resize',render);
+render();
+</script>
+</body>
+</html>
