@@ -19,6 +19,7 @@
 - 仕様にない判断が必要になったら、`spec.md` の「未決定事項」を確認する。そこに載っている項目は、実装前にユーザーに確認する。載っていない小さな判断は自分で決め、PR の説明に書く
 - 1つの段階を1つのブランチで進める（例：`feature/panel-p1-display`）。小さくコミットする
 - `git push`、`sudo` を使う操作、`./install.sh`（`--dry-run` なし）はユーザーが行う。必要になったら依頼する
+- 例外として、`Tools/dev_install_user.sh`（`sudo` なしで `~/Library/Input Methods` に入れ直す）は Claude が実行してよい。実機での確認も、computer use でできるところまで Claude が行う
 
 ## ビルドとテスト
 
@@ -35,6 +36,7 @@ swiftlint --quiet --strict
 ```
 
 - `./install.sh`（`--dry-run` なし）は `sudo` で `/Library/Input Methods/azooKeyMac.app` を置き換える。これはユーザーが実行する
+- 開発中は `Tools/dev_install_user.sh` で `~/Library/Input Methods` に入れ直す。`/Library/Input Methods` に同じアプリが残っていると止まる
 - 段階の作業が終わったら、ユーザーに「`./install.sh` を実行して、次の点を試してほしい」と、確認項目を箇条書きで伝える
 - CI（`.github/workflows/swift.yml`）は macOS で `Core` とアプリのテスト、Ubuntu で `Core` のテストを回す。Ubuntu では Zenzai が無効になる点に注意する（`Core/Package.swift`）
 
