@@ -28,6 +28,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     private var replaceSuggestionWindow: NSWindow
     private var replaceSuggestionsViewController: ReplaceSuggestionsViewController
 
+    private let liveConversionPanelWindow = LiveConversionPanelWindow()
+
     var promptInputWindow: PromptInputWindow
     var isPromptWindowVisible: Bool = false
 
@@ -170,6 +172,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesWindow.orderOut(nil)
         self.candidatesViewController.hide()
         self.hidePredictionWindow()
+        self.liveConversionPanelWindow.hide()
     }
 
     @MainActor
@@ -180,6 +183,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesWindow.orderOut(nil)
         self.predictionWindow.orderOut(nil)
         self.replaceSuggestionWindow.orderOut(nil)
+        self.liveConversionPanelWindow.hide()
         self.candidatesViewController.updateCandidatePresentations([], selectionIndex: nil, cursorLocation: .zero)
         super.deactivateServer(sender)
     }
@@ -604,6 +608,21 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             self.candidatesWindow.orderOut(nil)
             self.candidatesViewController.hide()
         }
+        self.refreshLiveConversionPanel()
+    }
+
+    /// 設定がオンでライブ変換中は、変換パネルを常に出す
+    private func refreshLiveConversionPanel() {
+        guard Config.LiveConversionPanel().value,
+              self.liveConversionEnabled,
+              self.inputState == .composing,
+              !self.segmentsManager.isEmpty else {
+            self.liveConversionPanelWindow.hide()
+            return
+        }
+        var rect: NSRect = .zero
+        self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.liveConversionPanelWindow.show(clauses: self.segmentsManager.getLiveConversionClauses(), anchor: rect)
     }
 
     func refreshPredictionWindow() {
