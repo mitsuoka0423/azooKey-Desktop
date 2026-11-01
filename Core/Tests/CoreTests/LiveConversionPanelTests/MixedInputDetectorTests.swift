@@ -156,3 +156,40 @@ struct MixedInputConversionTests {
         }
     }
 }
+
+#if canImport(AppKit)
+import AppKit
+
+/// macOS のスペルチェッカー（アプリと同じ判定）
+private struct SpellCheckerWordChecker: EnglishWordChecker {
+    func isEnglishWord(_ word: String) -> Bool {
+        NSSpellChecker.shared.checkSpelling(of: word, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+            .location == NSNotFound
+    }
+}
+
+@MainActor
+@Suite("MixedInput（スペルチェッカー）")
+struct MixedInputSpellCheckerTests {
+    @Test("スペルチェッカーは site や sit も英単語と認めるが、英単語の後ろの日本語は日本語のまま")
+    func englishThenJapanese() {
+        for (typed, expected) in [
+            ("commitsite", "commitして"),
+            ("asitanokaigidehabranchwokittekaracommitsitereviewwoonegaisimasu", "明日の会議ではbranchを切ってからcommitしてreviewをお願いします"),
+            ("watasihagakuseidesu", "私は学生です")
+        ] {
+            let manager = SegmentsManager(
+                kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+                applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+                containerURL: nil,
+                context: .init(useZenzai: false, forceLiveConversionPanel: true)
+            )
+            manager.englishWordChecker = SpellCheckerWordChecker()
+            for character in typed {
+                manager.insertAtCursorPosition(String(character), inputStyle: .roman2kana)
+            }
+            #expect(manager.getLiveConversionClauses().map(\.surface).joined() == expected, "\(typed)")
+        }
+    }
+}
+#endif

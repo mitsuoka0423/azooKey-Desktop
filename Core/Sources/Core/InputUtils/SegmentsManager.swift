@@ -1244,11 +1244,18 @@ public final class SegmentsManager {
             }
             typed.append(character)
         }
-        // 調べ直すのは末尾の一定の範囲だけ。それより前は、範囲に入っていたときに決めた入力方式のまま使う
-        let start = Self.detectionWindowStart(typed: typed, elements: elements)
-        let window = Array(typed[start...])
         // 日本語としての読みは全体を変換する（打つたびに少しずつ足すので、エンジンの使い回しが効いて速い）
         let readingElements = self.japaneseReadingElements(elements)
+        var whole = ComposingText()
+        whole.insertAtCursorPosition(readingElements)
+        // 調べ直すのは末尾の一定の範囲だけ。それより前は、範囲に入っていたときに決めた入力方式のまま使う。
+        // 範囲の頭は、全部を日本語として読んだ読みの音節の切れ目に合わせる（commit｜site の s は「つぃ」の途中）
+        let start = Self.detectionWindowStart(typed: typed, elements: elements) { position in
+            var prefix = ComposingText()
+            prefix.insertAtCursorPosition(Array(readingElements[..<position]))
+            return whole.convertTarget.hasPrefix(prefix.convertTarget)
+        }
+        let window = Array(typed[start...])
         var prefix = ComposingText()
         prefix.insertAtCursorPosition(Array(readingElements[..<start]))
         let englishRanges = MixedInputDetector.englishRanges(
@@ -1275,7 +1282,11 @@ public final class SegmentsManager {
 
     /// 混在入力の見分けで調べ直す範囲の始まり。英単語は長くても 15 文字ほどなので、末尾の 24 文字を目安にし、
     /// 音節の切れ目（母音・空白の直後）か、英字のまま渡している並びの頭まで戻す
-    private static func detectionWindowStart(typed: [Character], elements: [ComposingText.InputElement]) -> Int {
+    private static func detectionWindowStart(
+        typed: [Character],
+        elements: [ComposingText.InputElement],
+        isAlignedWithReading: (Int) -> Bool
+    ) -> Int {
         var start = max(0, typed.count - 24)
         while start > 0 {
             let previousIsDirect = elements[start - 1].inputStyle == .direct && typed[start - 1] != " "
@@ -1283,7 +1294,7 @@ public final class SegmentsManager {
             if previousIsDirect && currentIsDirect {
                 // 英字のまま渡している並びの途中なので、その頭まで戻す
                 start -= 1
-            } else if previousIsDirect || "aiueo ".contains(typed[start - 1]) {
+            } else if (previousIsDirect || "aiueo ".contains(typed[start - 1])) && isAlignedWithReading(start) {
                 return start
             } else {
                 start -= 1

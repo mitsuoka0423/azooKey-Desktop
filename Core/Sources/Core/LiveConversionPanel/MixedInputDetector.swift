@@ -83,6 +83,8 @@ public enum MixedInputDetector {
         let checker: any EnglishWordChecker
         /// 先頭から k 文字を日本語として読んだときの、読みの中での位置
         let kanaLengths: [Int]
+        /// 先頭から k 文字の読みが、全体の読みの頭と一致しているか（音節の途中で切れていないか）
+        let alignedPrefixes: [Bool]
         /// 語ごとの読みの範囲と、辞書の語か
         let elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)]
 
@@ -91,12 +93,16 @@ public enum MixedInputDetector {
             self.inputStyle = inputStyle
             self.checker = checker
             var kanaLengths = [reading.offset]
+            var prefixes = [""]
             var text = ComposingText()
             for character in chars {
                 text.insertAtCursorPosition(String(character), inputStyle: inputStyle)
                 kanaLengths.append(reading.offset + text.convertTarget.count)
+                prefixes.append(text.convertTarget)
             }
             self.kanaLengths = kanaLengths
+            let whole = text.convertTarget
+            self.alignedPrefixes = prefixes.map { whole.hasPrefix($0) }
             var elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)] = []
             var position = 0
             for element in reading.elements {
@@ -117,6 +123,8 @@ public enum MixedInputDetector {
                     // 規則で英語と決まった部分は飛ばし、その後ろから読み直す
                     start = rule.upperBound
                 } else if self.chars[start].isLowercase, clean[start - segmentStart],
+                          // 全体の読みと位置が合う所からだけ（commit｜site の s は、全体の読みでは「つぃ」の途中）
+                          self.alignedPrefixes[start],
                           let end = self.wordEnd(from: start, avoiding: ruleRanges, isClean: { clean[$0 - segmentStart] }) {
                     found.append(start..<end)
                     start = end
