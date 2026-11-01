@@ -17,10 +17,12 @@ public enum LiveConversionConfidence {
 
     /// - Parameters:
     ///   - surface: 本文（エンジン）の表記
-    ///   - dictionaryCandidates: その文節の読みだけを Zenzai なしで変換した候補（スコアの高い順）
+    ///   - dictionaryCandidates: その文節の読みだけを Zenzai なしで変換した候補
     public static func isLow(surface: String, reading: String, dictionaryCandidates: [ScoredCandidate]) -> Bool {
         // かなだけの候補（ひらがな・カタカナにしただけのもの）は比べない
-        let kanji = dictionaryCandidates.filter { !Self.isKanaOnly($0.text) }
+        let kanji = dictionaryCandidates
+            .filter { !Self.isKanaOnly($0.text) }
+            .sorted { $0.score > $1.score }
         guard let first = kanji.first else {
             return false
         }

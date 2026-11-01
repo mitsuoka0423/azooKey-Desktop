@@ -1158,9 +1158,10 @@ public final class SegmentsManager {
         self.liveConversionPanelState.segmented(self.rawLiveConversionClauses(), convert: self.topSurface(for:))
     }
 
-    /// 区切りを変えた文節の表記。読みを辞書変換した 1 位（なければ読みのまま）
+    /// 区切りを変えた文節の表記。読みを辞書変換した候補のうち、かなだけではない最初のもの（なければ読みのまま）
     private func topSurface(for reading: String) -> String {
-        self.dictionaryCandidates(for: reading).first?.text ?? reading
+        let candidates = self.dictionaryCandidates(for: reading)
+        return (candidates.first { !LiveConversionConfidence.isKanaOnly($0.text) } ?? candidates.first)?.text ?? reading
     }
 
     /// 変換パネルに出す文節の列。ユーザーが変えた区切りと選んだ表記を覆いかぶせる
@@ -1224,7 +1225,7 @@ public final class SegmentsManager {
         )
     }
 
-    /// 文節の読みだけを Zenzai なしで別のセッションで変換した候補（スコアの高い順）。結果は読みごとに使い回す
+    /// 文節の読みだけを Zenzai なしで別のセッションで変換した候補（エンジンが返した順）。結果は読みごとに使い回す
     private func dictionaryCandidates(for reading: String) -> [LiveConversionConfidence.ScoredCandidate] {
         if let cached = self.clauseCandidatesCache[reading] {
             return cached
@@ -1253,11 +1254,10 @@ public final class SegmentsManager {
         }) else {
             return []
         }
-        // 読み全体を覆う候補だけを、重ならないようにスコアの高い順で使う
+        // 読み全体を覆う候補だけを、重ならないように使う。かなだけの候補はスコアが高めに出るので、スコアでは並べ替えない
         var seen = Set<String>()
         return (result.mainResults + result.firstClauseResults)
             .filter { text.isWholeComposingText(composingCount: $0.composingCount) }
-            .sorted { $0.value > $1.value }
             .filter { seen.insert($0.text).inserted }
             .map { LiveConversionConfidence.ScoredCandidate(text: $0.text, score: Double($0.value)) }
     }

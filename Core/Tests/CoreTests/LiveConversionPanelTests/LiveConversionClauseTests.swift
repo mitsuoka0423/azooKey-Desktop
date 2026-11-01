@@ -154,6 +154,8 @@ struct LiveConversionClauseTests {
         #expect(manager.handleLiveConversionPanelKey(.shrink) == .handled)
         #expect(manager.getLiveConversionClauses().map(\.reading) == ["あした", "はしの"])
         #expect(manager.getLiveConversionClauses().first?.surface == "明日")
+        // かなだけの候補はスコアが高めに出るが、区切り直した文節の表記には使わない
+        #expect(manager.getLiveConversionClauses().last?.surface != "ハシノ")
 
         manager.insertAtCursorPosition("hasiwo", inputStyle: .roman2kana)
         let clauses = manager.getLiveConversionClauses()
