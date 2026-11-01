@@ -112,6 +112,32 @@ struct LiveConversionClauseTests {
     }
 
     @MainActor
+    @Test("実際の変換：同音異義語の文節に自信の低さの印と意味の手がかりがつく")
+    func lowConfidenceAndHints() {
+        let manager = SegmentsManager(
+            kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+            applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+            containerURL: nil,
+            context: .init(useZenzai: false)
+        )
+        manager.insertAtCursorPosition("kaigiwohasiwo", inputStyle: .roman2kana)
+        let model = manager.getLiveConversionPanelModel()
+        let low = model.columns.filter(\.isLowConfidence).map(\.reading)
+        #expect(low.contains("はしを"))
+        #expect(!low.contains("かいぎを"))
+        // 入力中は、自信の低い文節が対象になる
+        #expect(model.columns.first { $0.isTarget }?.reading == "はしを")
+        let hints = Dictionary(uniqueKeysWithValues: (model.candidateList?.items ?? []).map { ($0.text, $0.hint) })
+        #expect(hints["箸を"] == "食事の道具")
+        #expect(hints["はしを"] == "ひらがな")
+
+        // 候補を選ぶと印は消える
+        _ = manager.handleLiveConversionPanelKey(.left)
+        _ = manager.handleLiveConversionPanelKey(.down)
+        #expect(manager.getLiveConversionPanelModel().columns.first { $0.reading == "はしを" }?.isLowConfidence == false)
+    }
+
+    @MainActor
     @Test("実際の変換：途中の文節で選んだ候補は、続けて入力しても保つ")
     func keepSelectionWhileTyping() {
         let manager = SegmentsManager(

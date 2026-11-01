@@ -73,7 +73,9 @@ public final class SegmentsManager {
     /// 変換パネルのキー操作による状態（選んだ文節の表記など）
     private var liveConversionPanelState = LiveConversionPanelState()
     /// 文節の読みごとの辞書変換の候補。変換パネルの候補リストに使い回す
-    private var clauseCandidatesCache: [String: [String]] = [:]
+    private var clauseCandidatesCache: [String: [LiveConversionConfidence.ScoredCandidate]] = [:]
+    /// 候補ごとの意味の手がかりの出典
+    private let hintProvider: any LiveConversionHintProvider = BundledLiveConversionHintProvider()
     /// 文節の候補を作るための変換セッション。本文の変換のキャッシュを壊さないよう分ける
     private var clauseConversionSessionID: KanaKanjiConverter.ConversionSessionID?
 
@@ -1158,18 +1160,26 @@ public final class SegmentsManager {
 
     public func getLiveConversionPanelModel() -> LiveConversionPanelModel {
         let clauses = self.rawLiveConversionClauses()
-        let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count)
+        let lowConfidence = self.lowConfidenceClauses(clauses)
+        let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count, lowConfidence: lowConfidence)
         return LiveConversionPanelModel.make(
             clauses: clauses,
             state: self.liveConversionPanelState,
-            targetCandidates: target.map { self.clauseCandidates(clauses[$0]) } ?? []
+            lowConfidence: lowConfidence,
+            targetCandidates: target.map { self.clauseCandidates(clauses[$0]) } ?? [],
+            hint: { candidate in
+                guard let target else {
+                    return ""
+                }
+                return self.hintProvider.displayHint(for: candidate, reading: clauses[target].reading)
+            }
         )
     }
 
     /// 変換パネルのキー操作。`.notHandled` のときは本来のキー処理に任せる
     public func handleLiveConversionPanelKey(_ key: LiveConversionPanelState.Key) -> LiveConversionPanelState.Effect {
         let clauses = self.rawLiveConversionClauses()
-        return self.liveConversionPanelState.handle(key, clauses: clauses) {
+        return self.liveConversionPanelState.handle(key, clauses: clauses, lowConfidence: self.lowConfidenceClauses(clauses)) {
             self.clauseCandidates(clauses[$0])
         }
     }
@@ -1179,26 +1189,39 @@ public final class SegmentsManager {
         self.clauseCandidatesCache.removeAll()
     }
 
-    /// 文節の候補。読みだけを Zenzai なしで別のセッションで変換し、結果は読みごとに使い回す
+    /// 自信の低い文節。ユーザーが候補を選んだ文節は除く
+    private func lowConfidenceClauses(_ clauses: [LiveConversionClause]) -> Set<Int> {
+        Set(clauses.indices.filter { index in
+            !self.liveConversionPanelState.isUserSelected(index, in: clauses)
+                && LiveConversionConfidence.isLow(
+                    surface: clauses[index].surface,
+                    reading: clauses[index].reading,
+                    dictionaryCandidates: self.dictionaryCandidates(for: clauses[index].reading)
+                )
+        })
+    }
+
+    /// 文節の候補。先頭は本文の表記
     private func clauseCandidates(_ clause: LiveConversionClause) -> [String] {
-        let dictionaryCandidates: [String]
-        if let cached = self.clauseCandidatesCache[clause.reading] {
-            dictionaryCandidates = cached
-        } else if clause.reading.unicodeScalars.contains(where: \.isASCII) {
-            // 未変換のローマ字などは変換しない
-            dictionaryCandidates = []
-        } else {
-            dictionaryCandidates = self.convertClauseReading(clause.reading)
-            self.clauseCandidatesCache[clause.reading] = dictionaryCandidates
-        }
-        return LiveConversionPanelModel.candidates(
+        LiveConversionPanelModel.candidates(
             engineSurface: clause.surface,
             reading: clause.reading,
-            dictionaryCandidates: dictionaryCandidates
+            dictionaryCandidates: self.dictionaryCandidates(for: clause.reading).map(\.text)
         )
     }
 
-    private func convertClauseReading(_ reading: String) -> [String] {
+    /// 文節の読みだけを Zenzai なしで別のセッションで変換した候補（スコアの高い順）。結果は読みごとに使い回す
+    private func dictionaryCandidates(for reading: String) -> [LiveConversionConfidence.ScoredCandidate] {
+        if let cached = self.clauseCandidatesCache[reading] {
+            return cached
+        }
+        // 未変換のローマ字などは変換しない
+        let candidates = reading.unicodeScalars.contains(where: \.isASCII) ? [] : self.convertClauseReading(reading)
+        self.clauseCandidatesCache[reading] = candidates
+        return candidates
+    }
+
+    private func convertClauseReading(_ reading: String) -> [LiveConversionConfidence.ScoredCandidate] {
         let sessionID = self.clauseConversionSessionID ?? self.kanaKanjiConverter.createSession()
         self.clauseConversionSessionID = sessionID
         var text = ComposingText()
@@ -1216,10 +1239,13 @@ public final class SegmentsManager {
         }) else {
             return []
         }
-        // 読み全体を覆う候補だけを使う
+        // 読み全体を覆う候補だけを、重ならないようにスコアの高い順で使う
+        var seen = Set<String>()
         return (result.mainResults + result.firstClauseResults)
             .filter { text.isWholeComposingText(composingCount: $0.composingCount) }
-            .map(\.text)
+            .sorted { $0.value > $1.value }
+            .filter { seen.insert($0.text).inserted }
+            .map { LiveConversionConfidence.ScoredCandidate(text: $0.text, score: Double($0.value)) }
     }
 
     /// 変換パネルを使うときの未確定文字列。文節ごとに下線を分け、対象の文節を太くする
@@ -1229,7 +1255,10 @@ public final class SegmentsManager {
             let text = clauses.map(\.surface).joined()
             return MarkedText(text: [.init(content: text, focus: .none)], selectionRange: .notFound)
         }
-        let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count)
+        let target = self.liveConversionPanelState.targetIndex(
+            clauseCount: clauses.count,
+            lowConfidence: self.lowConfidenceClauses(self.rawLiveConversionClauses())
+        )
         let text = clauses.enumerated().map { index, clause in
             MarkedText.Element(content: clause.surface, focus: index == target ? .focused : .unfocused)
         }
