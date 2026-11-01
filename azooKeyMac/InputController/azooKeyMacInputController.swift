@@ -359,6 +359,14 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             }
         }
 
+        if self.isLiveConversionPanelActive,
+           let panelKey = LiveConversionPanelState.Key(userAction: userAction, modifiers: eventModifiers),
+           self.segmentsManager.handleLiveConversionPanelKey(panelKey) == .handled {
+            self.refreshMarkedText()
+            self.refreshCandidateWindow()
+            return true
+        }
+
         let (clientAction, clientActionCallback) = inputState.event(
             eventCore: event.keyEventCore,
             userAction: userAction,
@@ -368,6 +376,15 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             enableSuggestion: aiBackendEnabled
         )
         return handleClientAction(clientAction, clientActionCallback: clientActionCallback, client: client)
+    }
+
+    /// 変換パネルがキー操作を受け持つか。設定がオフのときは本家と同じキー処理にする
+    private var isLiveConversionPanelActive: Bool {
+        Config.LiveConversionPanel().value
+            && self.liveConversionEnabled
+            && self.inputLanguage == .japanese
+            && self.inputState == .composing
+            && !self.segmentsManager.isEmpty
     }
 
     private var inputStyle: InputStyle {
@@ -613,16 +630,13 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     /// 設定がオンでライブ変換中は、変換パネルを常に出す
     private func refreshLiveConversionPanel() {
-        guard Config.LiveConversionPanel().value,
-              self.liveConversionEnabled,
-              self.inputState == .composing,
-              !self.segmentsManager.isEmpty else {
+        guard self.isLiveConversionPanelActive else {
             self.liveConversionPanelWindow.hide()
             return
         }
         var rect: NSRect = .zero
         self.client().attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
-        self.liveConversionPanelWindow.show(clauses: self.segmentsManager.getLiveConversionClauses(), anchor: rect)
+        self.liveConversionPanelWindow.show(model: self.segmentsManager.getLiveConversionPanelModel(), anchor: rect)
     }
 
     func refreshPredictionWindow() {

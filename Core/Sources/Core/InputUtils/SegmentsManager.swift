@@ -1156,7 +1156,6 @@ public final class SegmentsManager {
         self.liveConversionPanelState.applying(to: self.rawLiveConversionClauses())
     }
 
-    @MainActor
     public func getLiveConversionPanelModel() -> LiveConversionPanelModel {
         let clauses = self.rawLiveConversionClauses()
         let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count)
@@ -1168,7 +1167,6 @@ public final class SegmentsManager {
     }
 
     /// 変換パネルのキー操作。`.notHandled` のときは本来のキー処理に任せる
-    @MainActor
     public func handleLiveConversionPanelKey(_ key: LiveConversionPanelState.Key) -> LiveConversionPanelState.Effect {
         let clauses = self.rawLiveConversionClauses()
         return self.liveConversionPanelState.handle(key, clauses: clauses) {
@@ -1182,7 +1180,6 @@ public final class SegmentsManager {
     }
 
     /// 文節の候補。読みだけを Zenzai なしで別のセッションで変換し、結果は読みごとに使い回す
-    @MainActor
     private func clauseCandidates(_ clause: LiveConversionClause) -> [String] {
         let dictionaryCandidates: [String]
         if let cached = self.clauseCandidatesCache[clause.reading] {
@@ -1201,7 +1198,6 @@ public final class SegmentsManager {
         )
     }
 
-    @MainActor
     private func convertClauseReading(_ reading: String) -> [String] {
         let sessionID = self.clauseConversionSessionID ?? self.kanaKanjiConverter.createSession()
         self.clauseConversionSessionID = sessionID

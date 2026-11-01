@@ -26,6 +26,20 @@ struct LiveConversionPanelStateTests {
         return state
     }
 
+    @Test("パネルが扱うキー。⇧← →、修飾キーつき、0 は本来のキー処理に任せる")
+    func keyMapping() {
+        typealias Key = LiveConversionPanelState.Key
+        #expect(Key(userAction: .navigation(.left), modifiers: []) == .left)
+        #expect(Key(userAction: .navigation(.down), modifiers: []) == .down)
+        #expect(Key(userAction: .space(prefersFullWidthWhenInput: true), modifiers: []) == .space)
+        #expect(Key(userAction: .number(.three), modifiers: []) == .number(3))
+        #expect(Key(userAction: .navigation(.left), modifiers: [.shift]) == nil)
+        #expect(Key(userAction: .tab, modifiers: [.option]) == nil)
+        #expect(Key(userAction: .number(.zero), modifiers: []) == nil)
+        #expect(Key(userAction: .enter, modifiers: []) == nil)
+        #expect(Key(userAction: .backspace, modifiers: []) == nil)
+    }
+
     @Test("入力中の対象は、自信の低い文節のうち最後のもの。なければ最後の文節")
     func targetWhileTyping() {
         let state = LiveConversionPanelState()
@@ -184,7 +198,7 @@ struct LiveConversionPanelModelTests {
     @Test("候補はエンジンの表記・辞書・ひらがな・カタカナの順で、重ならず 9 件まで")
     func candidateOrder() {
         #expect(LiveConversionPanelModel.candidates(engineSurface: "橋を", reading: "はしを", dictionaryCandidates: ["橋を", "箸を", "端を"])
-            == ["橋を", "箸を", "端を", "はしを", "ハシヲ"])
+                    == ["橋を", "箸を", "端を", "はしを", "ハシヲ"])
         let many = (1...20).map { "候補\($0)" }
         #expect(LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: many).count == 9)
     }

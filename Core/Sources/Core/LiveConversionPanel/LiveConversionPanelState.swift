@@ -28,6 +28,33 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     public enum Key: Sendable, Equatable {
         case left, right, up, down, space, tab, escape
         case number(Int)
+
+        /// キー操作のうち、パネルが扱うもの。⇧← →（区切り）や修飾キーつきは本来のキー処理に任せる
+        public init?(userAction: UserAction, modifiers: KeyEventCore.ModifierFlag) {
+            guard modifiers.isDisjoint(with: [.command, .option, .control]) else {
+                return nil
+            }
+            switch userAction {
+            case .navigation(.left) where !modifiers.contains(.shift):
+                self = .left
+            case .navigation(.right) where !modifiers.contains(.shift):
+                self = .right
+            case .navigation(.up):
+                self = .up
+            case .navigation(.down):
+                self = .down
+            case .space:
+                self = .space
+            case .tab:
+                self = .tab
+            case .escape:
+                self = .escape
+            case .number(let number) where (1...9).contains(number.intValue):
+                self = .number(number.intValue)
+            default:
+                return nil
+            }
+        }
     }
 
     public enum Effect: Sendable, Equatable {
