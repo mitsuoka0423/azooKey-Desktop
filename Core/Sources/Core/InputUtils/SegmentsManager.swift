@@ -1115,6 +1115,18 @@ public final class SegmentsManager {
         return (appendText, deleteCount)
     }
 
+    /// 変換パネルに出す文節の列。条件は `getCurrentMarkedText(inputState: .composing)` とそろえる
+    public func getLiveConversionClauses() -> [LiveConversionClause] {
+        let candidate: Candidate? = if self.lastOperation != .delete,
+                                       self.liveConversionEnabled,
+                                       self.composingText.convertTarget.count > 1 {
+            self.rawCandidates?.mainResults.first
+        } else {
+            nil
+        }
+        return LiveConversionClause.clauses(convertTarget: self.composingText.convertTarget, candidate: candidate)
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     public func getCurrentMarkedText(inputState: InputState) -> MarkedText {
         switch inputState {
