@@ -41,6 +41,9 @@ public final class SegmentsManager {
         if let clauseConversionSessionID {
             self.kanaKanjiConverter.removeSession(clauseConversionSessionID)
         }
+        if let readingConversionSessionID {
+            self.kanaKanjiConverter.removeSession(readingConversionSessionID)
+        }
     }
 
     /// 辞書・モデルは共有し、変換中の状態は入力セッションごとに分離する。
@@ -74,7 +77,14 @@ public final class SegmentsManager {
         (self.context.forceLiveConversionPanel || Config.LiveConversionPanel().value) && self.liveConversionEnabled
     }
     /// 日本語と英語の混在入力に使う英単語の判定。`nil` なら混在入力の見分けをしない
-    public var englishWordChecker: (any EnglishWordChecker)?
+    public var englishWordChecker: (any EnglishWordChecker)? {
+        didSet {
+            self.cachingEnglishWordChecker = self.englishWordChecker.map(CachingEnglishWordChecker.init(base:))
+        }
+    }
+    private var cachingEnglishWordChecker: CachingEnglishWordChecker?
+    /// 打った文字を全部日本語として読んで変換するためのセッション。混在入力の見分けに使う
+    private var readingConversionSessionID: KanaKanjiConverter.ConversionSessionID?
     /// 変換パネルのキー操作による状態（選んだ文節の表記など）
     private var liveConversionPanelState = LiveConversionPanelState()
     /// 文節の読みごとの辞書変換の候補。変換パネルの候補リストに使い回す
@@ -1220,7 +1230,7 @@ public final class SegmentsManager {
     /// 日本語と英語が混ざった入力のうち、英単語の部分を英字のままエンジンに渡すよう、入力方式を付け替える
     private func applyMixedInputDetection() {
         guard self.liveConversionPanelEnabled,
-              let checker = self.englishWordChecker,
+              let checker = self.cachingEnglishWordChecker,
               self.lastInputStyle != .direct,
               self.composingText.isAtEndIndex else {
             return
@@ -1234,9 +1244,26 @@ public final class SegmentsManager {
             }
             typed.append(character)
         }
-        let englishRanges = MixedInputDetector.englishRanges(in: typed, inputStyle: self.lastInputStyle, checker: checker)
+        // 調べ直すのは末尾の一定の範囲だけ。それより前は、範囲に入っていたときに決めた入力方式のまま使う
+        let start = Self.detectionWindowStart(typed: typed, elements: elements)
+        let window = Array(typed[start...])
+        // 日本語としての読みは全体を変換する（打つたびに少しずつ足すので、エンジンの使い回しが効いて速い）
+        let readingElements = self.japaneseReadingElements(elements)
+        var prefix = ComposingText()
+        prefix.insertAtCursorPosition(Array(readingElements[..<start]))
+        let englishRanges = MixedInputDetector.englishRanges(
+            in: window,
+            inputStyle: self.lastInputStyle,
+            japaneseReading: self.japaneseReading(of: readingElements).map {
+                MixedInputDetector.JapaneseReading(elements: $0, offset: prefix.convertTarget.count)
+            },
+            checker: checker
+        )
         let styles: [InputStyle] = typed.indices.map { index in
-            typed[index] == " " || englishRanges.contains { $0.contains(index) } ? .direct : self.lastInputStyle
+            guard index >= start else {
+                return elements[index].inputStyle
+            }
+            return typed[index] == " " || englishRanges.contains { $0.contains(index - start) } ? .direct : self.lastInputStyle
         }
         guard styles != elements.map(\.inputStyle) else {
             return
@@ -1244,6 +1271,53 @@ public final class SegmentsManager {
         var rebuilt = ComposingText()
         rebuilt.insertAtCursorPosition(zip(elements, styles).map { .init(piece: $0.piece, inputStyle: $1) })
         self.composingText = rebuilt
+    }
+
+    /// 混在入力の見分けで調べ直す範囲の始まり。英単語は長くても 15 文字ほどなので、末尾の 24 文字を目安にし、
+    /// 音節の切れ目（母音・空白の直後）か、英字のまま渡している並びの頭まで戻す
+    private static func detectionWindowStart(typed: [Character], elements: [ComposingText.InputElement]) -> Int {
+        var start = max(0, typed.count - 24)
+        while start > 0 {
+            let previousIsDirect = elements[start - 1].inputStyle == .direct && typed[start - 1] != " "
+            let currentIsDirect = start < elements.count && elements[start].inputStyle == .direct
+            if previousIsDirect && currentIsDirect {
+                // 英字のまま渡している並びの途中なので、その頭まで戻す
+                start -= 1
+            } else if previousIsDirect || "aiueo ".contains(typed[start - 1]) {
+                return start
+            } else {
+                start -= 1
+            }
+        }
+        return 0
+    }
+
+    /// 打った文字を全部日本語として読む入力（空白はそのまま）
+    private func japaneseReadingElements(_ elements: [ComposingText.InputElement]) -> [ComposingText.InputElement] {
+        elements.map { element in
+            let isSpace = Self.typedCharacter(element.piece) == " "
+            return .init(piece: element.piece, inputStyle: isSpace ? .direct : self.lastInputStyle)
+        }
+    }
+
+    /// 打った文字を全部日本語として読んで Zenzai なしで変換したときの 1 位の語の並び
+    private func japaneseReading(of readingElements: [ComposingText.InputElement]) -> [DicdataElement]? {
+        let sessionID = self.readingConversionSessionID ?? self.kanaKanjiConverter.createSession()
+        self.readingConversionSessionID = sessionID
+        var text = ComposingText()
+        text.insertAtCursorPosition(readingElements)
+        let options = self.options(
+            leftSideContext: nil,
+            rightSideContext: nil,
+            requestRichCandidates: false,
+            requireJapanesePrediction: .disabled,
+            requireEnglishPrediction: .disabled,
+            useZenzai: false
+        )
+        let result = try? self.kanaKanjiConverter.withSession(sessionID) {
+            self.kanaKanjiConverter.requestCandidates(text, options: options)
+        }
+        return result?.mainResults.first?.data
     }
 
     private static func typedCharacter(_ piece: InputPiece) -> Character? {
@@ -1289,7 +1363,7 @@ public final class SegmentsManager {
     }
 
     private func typedEnglishWord(_ clauses: [LiveConversionClause], at index: Int) -> String? {
-        guard let checker = self.englishWordChecker else {
+        guard let checker = self.cachingEnglishWordChecker else {
             return nil
         }
         let start = LiveConversionPanelState.starts(of: clauses)[index]

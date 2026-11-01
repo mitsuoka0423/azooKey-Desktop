@@ -100,14 +100,14 @@ struct MixedInputConversionTests {
         #expect(manager.getLiveConversionClauses().map(\.surface).joined() == "私は学生です")
     }
 
-    @Test("ローマ字としても読める英単語は日本語のまま、候補に打ったとおりの英字が並ぶ")
+    @Test("日本語として読める語は日本語のまま、候補に打ったとおりの英字が並ぶ")
     func ambiguousCandidate() {
         let manager = Self.manager()
-        Self.type(manager, "kitewo")
+        Self.type(manager, "sakewo")
         let model = manager.getLiveConversionPanelModel()
         let texts = model.candidateList?.items.map(\.text) ?? []
-        #expect(!(model.columns.first?.surface.hasPrefix("kite") ?? true))
-        #expect(texts.contains("kiteを"))
+        #expect(model.columns.first?.surface == "酒を")
+        #expect(texts.contains("sakeを"))
     }
 
     @Test("末尾の子音がローマ字として読めなければ、後ろにかなが続く前から英字のまま")
@@ -126,5 +126,33 @@ struct MixedInputConversionTests {
         #expect(manager.convertTarget == "deploy")
         manager.deleteBackwardFromCursorPosition()
         #expect(manager.convertTarget == "でpぉ")
+    }
+
+    @Test("ローマ字としても読める英単語でも、日本語として読むと辞書の語に収まらなければ英字のまま")
+    func dictionaryFragmented() {
+        for (typed, expected) in [
+            ("commitsite", "commitして"),
+            ("reviewwoonegaisimasu", "reviewをお願いします"),
+            ("rebasesuru", "rebaseする")
+        ] {
+            let manager = Self.manager()
+            Self.type(manager, typed)
+            #expect(manager.getLiveConversionClauses().map(\.surface).joined() == expected, "\(typed)")
+        }
+    }
+
+    @Test("日本語として読んで辞書の語に収まるなら日本語のまま（来て・酒・トマト・天気）")
+    func dictionaryCovered() {
+        for (typed, expected) in [
+            ("kokonikitekudasai", "ここに来てください"),
+            ("sakewonomu", "酒を飲む"),
+            ("tomatowokau", "トマトを買う"),
+            ("kyouhaiitenkidesune", "今日はいい天気ですね"),
+            ("sinkansendeiku", "新幹線で行く")
+        ] {
+            let manager = Self.manager()
+            Self.type(manager, typed)
+            #expect(manager.getLiveConversionClauses().map(\.surface).joined() == expected, "\(typed)")
+        }
     }
 }
