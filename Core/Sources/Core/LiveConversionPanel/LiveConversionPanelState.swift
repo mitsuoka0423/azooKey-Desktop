@@ -1,17 +1,21 @@
-/// 変換パネルで、ユーザーが選んだ文節の表記
+/// 変換パネルで、ユーザーが選んだ文節の表記や区切り
 ///
-/// エンジンは入力のたびに文全体を変換し直すので、選んだ候補は IME 側で覆いかぶせて保つ。
-/// 変換し直したあとも、同じ位置に同じ読みの文節があれば、この表記で出す。
+/// エンジンは入力のたびに文全体を変換し直すので、選んだ候補や区切りは IME 側で覆いかぶせて保つ。
+/// - 候補を選んだだけのもの：変換し直したあとも、同じ位置に同じ読みの文節があれば、この表記で出す
+/// - 区切りを変えたもの（`isBoundary`）：その位置の読みが変わらないかぎり、この区切りと表記で出す
 public struct LiveConversionClauseOverride: Sendable, Equatable {
     /// 未確定文字列の中での、文節の読みの開始位置（文字数）
     public var start: Int
     public var reading: String
     public var surface: String
+    /// ⇧← → で区切りを変えた文節か
+    public var isBoundary: Bool
 
-    public init(start: Int, reading: String, surface: String) {
+    public init(start: Int, reading: String, surface: String, isBoundary: Bool = false) {
         self.start = start
         self.reading = reading
         self.surface = surface
+        self.isBoundary = isBoundary
     }
 }
 
@@ -28,17 +32,21 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     public enum Key: Sendable, Equatable {
         case left, right, up, down, space, tab, escape
         case number(Int)
+        /// ⇧←：対象の文節を 1 文字縮める
+        case shrink
+        /// ⇧→：対象の文節を 1 文字伸ばす
+        case extend
 
-        /// キー操作のうち、パネルが扱うもの。⇧← →（区切り）や修飾キーつきは本来のキー処理に任せる
+        /// キー操作のうち、パネルが扱うもの。修飾キーつき（⇧ を除く）は本来のキー処理に任せる
         public init?(userAction: UserAction, modifiers: KeyEventCore.ModifierFlag) {
             guard modifiers.isDisjoint(with: [.command, .option, .control]) else {
                 return nil
             }
             switch userAction {
-            case .navigation(.left) where !modifiers.contains(.shift):
-                self = .left
-            case .navigation(.right) where !modifiers.contains(.shift):
-                self = .right
+            case .navigation(.left):
+                self = modifiers.contains(.shift) ? .shrink : .left
+            case .navigation(.right):
+                self = modifiers.contains(.shift) ? .extend : .right
             case .navigation(.up):
                 self = .up
             case .navigation(.down):
@@ -87,6 +95,50 @@ public struct LiveConversionPanelState: Sendable, Equatable {
             defer { position += clause.reading.count }
             return position
         }
+    }
+
+    /// 区切りの覆いかぶせを当てた文節の列（表記はまだ当てない）。
+    /// 区切りを変えた文節は `convert`（読みから表記を作る）で表記を決め、
+    /// 区切りの変更で一部だけ残ったエンジンの文節も `convert` で表記を作り直す
+    public func segmented(_ clauses: [LiveConversionClause], convert: (String) -> String) -> [LiveConversionClause] {
+        let text = Array(clauses.map(\.reading).joined())
+        let boundaries = self.overrides
+            .filter { override in
+                // その位置の読みが変わっていない区切りだけを使う
+                override.isBoundary
+                    && override.start + override.reading.count <= text.count
+                    && String(text[override.start..<override.start + override.reading.count]) == override.reading
+            }
+            .sorted { $0.start < $1.start }
+        guard !boundaries.isEmpty else {
+            return clauses
+        }
+        let starts = Self.starts(of: clauses)
+        var result: [LiveConversionClause] = []
+        var position = 0
+        func appendEngineClauses(upTo end: Int) {
+            for (clause, start) in zip(clauses, starts) {
+                let from = max(start, position)
+                let to = min(start + clause.reading.count, end)
+                guard from < to else {
+                    continue
+                }
+                if from == start, to == start + clause.reading.count {
+                    result.append(clause)
+                } else {
+                    let reading = String(text[from..<to])
+                    result.append(.init(reading: reading, surface: convert(reading)))
+                }
+            }
+            position = max(position, end)
+        }
+        for boundary in boundaries where boundary.start >= position {
+            appendEngineClauses(upTo: boundary.start)
+            result.append(.init(reading: boundary.reading, surface: convert(boundary.reading)))
+            position = boundary.start + boundary.reading.count
+        }
+        appendEngineClauses(upTo: text.count)
+        return result
     }
 
     /// 選んだ表記を覆いかぶせた文節の列
@@ -146,7 +198,8 @@ public struct LiveConversionPanelState: Sendable, Equatable {
         _ key: Key,
         clauses: [LiveConversionClause],
         lowConfidence: Set<Int> = [],
-        candidates: (Int) -> [String]
+        candidates: (Int) -> [String],
+        convert: (String) -> String = { $0 }
     ) -> Effect {
         guard let target = self.targetIndex(clauseCount: clauses.count, lowConfidence: lowConfidence) else {
             return .notHandled
@@ -164,6 +217,8 @@ public struct LiveConversionPanelState: Sendable, Equatable {
             self.isExpanded.toggle()
         case .escape:
             self.select(clauses[target].reading, at: target, in: clauses)
+        case .shrink, .extend:
+            self.resize(by: key == .extend ? 1 : -1, at: target, in: clauses, convert: convert)
         case .number(let number):
             // 数字で選べるのは文節を選んでいる間だけ。入力中は数字の入力にする
             guard case .selecting = self.mode else {
@@ -208,7 +263,40 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     private mutating func select(_ surface: String, at index: Int, in clauses: [LiveConversionClause]) {
         let start = Self.starts(of: clauses)[index]
         let reading = clauses[index].reading
+        // 区切りを変えた文節で候補を選んでも、区切りは保つ
+        let isBoundary = self.overrides.first { $0.start == start }?.isBoundary ?? false
         self.overrides.removeAll { $0.start == start }
-        self.overrides.append(.init(start: start, reading: reading, surface: surface))
+        self.overrides.append(.init(start: start, reading: reading, surface: surface, isBoundary: isBoundary))
+    }
+
+    /// 対象の文節の区切りを 1 文字動かす。伸ばすときは次の文節の先頭を取り込み、縮めるときは末尾を次の文節へ送る
+    private mutating func resize(by delta: Int, at target: Int, in clauses: [LiveConversionClause], convert: (String) -> String) {
+        if case .typing = self.mode {
+            self.mode = .selecting(target)
+        }
+        self.isExpanded = false
+        let start = Self.starts(of: clauses)[target]
+        var reading = Array(clauses[target].reading)
+        var next = target + 1 < clauses.count ? Array(clauses[target + 1].reading) : []
+        if delta > 0 {
+            // 未変換のローマ字は取り込まない
+            guard let first = next.first, !first.isASCII else {
+                return
+            }
+            reading.append(next.removeFirst())
+        } else {
+            guard reading.count > 1 else {
+                return
+            }
+            next.insert(reading.removeLast(), at: 0)
+        }
+        let end = start + reading.count + next.count
+        self.overrides.removeAll { $0.start < end && $0.start + $0.reading.count > start }
+        let targetReading = String(reading)
+        self.overrides.append(.init(start: start, reading: targetReading, surface: convert(targetReading), isBoundary: true))
+        if !next.isEmpty {
+            let nextReading = String(next)
+            self.overrides.append(.init(start: start + reading.count, reading: nextReading, surface: convert(nextReading), isBoundary: true))
+        }
     }
 }
