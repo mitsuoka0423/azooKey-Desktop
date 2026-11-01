@@ -35,6 +35,9 @@ public final class SegmentsManager {
 
     deinit {
         self.kanaKanjiConverter.removeSession(self.conversionSessionID)
+        if let clauseConversionSessionID {
+            self.kanaKanjiConverter.removeSession(clauseConversionSessionID)
+        }
     }
 
     /// 辞書・モデルは共有し、変換中の状態は入力セッションごとに分離する。
@@ -63,6 +66,16 @@ public final class SegmentsManager {
         Config.ZenzaiPersonalizationLevel().value
     }
     private var rawCandidates: ConversionResult?
+
+    private var liveConversionPanelEnabled: Bool {
+        Config.LiveConversionPanel().value && self.liveConversionEnabled
+    }
+    /// 変換パネルのキー操作による状態（選んだ文節の表記など）
+    private var liveConversionPanelState = LiveConversionPanelState()
+    /// 文節の読みごとの辞書変換の候補。変換パネルの候補リストに使い回す
+    private var clauseCandidatesCache: [String: [String]] = [:]
+    /// 文節の候補を作るための変換セッション。本文の変換のキャッシュを壊さないよう分ける
+    private var clauseConversionSessionID: KanaKanjiConverter.ConversionSessionID?
 
     private var selectionIndex: Int?
     private var didExperienceSegmentEdition = false
@@ -208,7 +221,8 @@ public final class SegmentsManager {
         rightSideContext: String?,
         requestRichCandidates: Bool,
         requireJapanesePrediction: ConvertRequestOptions.PredictionMode,
-        requireEnglishPrediction: ConvertRequestOptions.PredictionMode
+        requireEnglishPrediction: ConvertRequestOptions.PredictionMode,
+        useZenzai: Bool = true
     ) -> ConvertRequestOptions {
         .init(
             requireJapanesePrediction: requireJapanesePrediction,
@@ -221,11 +235,11 @@ public final class SegmentsManager {
             sharedContainerURL: CompiledUserDictionaryStore.directoryURL(memoryDirectoryURL: self.azooKeyMemoryDir),
             textReplacer: Self.textReplacer,
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
-            zenzaiMode: self.zenzaiMode(
+            zenzaiMode: useZenzai ? self.zenzaiMode(
                 leftSideContext: leftSideContext,
                 rightSideContext: rightSideContext,
                 requestRichCandidates: requestRichCandidates
-            ),
+            ) : .off,
             experimentalZenzaiPredictiveInput: true,
             typoCorrectionMode: .automatic,
             metadata: self.metadata
@@ -286,6 +300,7 @@ public final class SegmentsManager {
         self.backspaceAdjustedPredictionCandidate = nil
         self.backspaceTypoCorrectionLock = nil
         self.lastInputStyle = .direct
+        self.resetLiveConversionPanel()
     }
 
     @MainActor
@@ -302,6 +317,7 @@ public final class SegmentsManager {
         self.backspaceAdjustedPredictionCandidate = nil
         self.backspaceTypoCorrectionLock = nil
         self.lastInputStyle = .direct
+        self.resetLiveConversionPanel()
     }
 
     @MainActor
@@ -317,6 +333,7 @@ public final class SegmentsManager {
         self.backspaceAdjustedPredictionCandidate = nil
         self.backspaceTypoCorrectionLock = nil
         self.lastInputStyle = .direct
+        self.resetLiveConversionPanel()
     }
 
     /// 変換キーを押したタイミングで入力の区切りを示す
@@ -339,6 +356,7 @@ public final class SegmentsManager {
         self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(string, inputStyle: inputStyle)
         self.lastOperation = .insert
+        self.liveConversionPanelState.didEditText()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -349,6 +367,7 @@ public final class SegmentsManager {
         self.lastInputStyle = inputStyle
         self.composingText.insertAtCursorPosition(pieces.map { .init(piece: $0, inputStyle: inputStyle) })
         self.lastOperation = .insert
+        self.liveConversionPanelState.didEditText()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -397,6 +416,7 @@ public final class SegmentsManager {
         }
         self.composingText.deleteBackwardFromCursorPosition(count: count)
         self.lastOperation = .delete
+        self.liveConversionPanelState.didEditText()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -596,6 +616,10 @@ public final class SegmentsManager {
             )
         }
         self.rawCandidates = result
+        // 削除のあとは本文がひらがなに戻るだけなので、選んだ表記は次の変換まで残す
+        if self.lastOperation != .delete {
+            self.liveConversionPanelState.dropOverrides(notMatching: self.rawLiveConversionClauses())
+        }
     }
 
     @MainActor public func update(requestRichCandidates: Bool) {
@@ -1115,8 +1139,8 @@ public final class SegmentsManager {
         return (appendText, deleteCount)
     }
 
-    /// 変換パネルに出す文節の列。条件は `getCurrentMarkedText(inputState: .composing)` とそろえる
-    public func getLiveConversionClauses() -> [LiveConversionClause] {
+    /// エンジンの変換結果からそのまま作った文節の列。条件は本家の `getCurrentMarkedText(inputState: .composing)` とそろえる
+    private func rawLiveConversionClauses() -> [LiveConversionClause] {
         let candidate: Candidate? = if self.lastOperation != .delete,
                                        self.liveConversionEnabled,
                                        self.composingText.convertTarget.count > 1 {
@@ -1127,12 +1151,101 @@ public final class SegmentsManager {
         return LiveConversionClause.clauses(convertTarget: self.composingText.convertTarget, candidate: candidate)
     }
 
+    /// 変換パネルに出す文節の列。ユーザーが選んだ表記を覆いかぶせる
+    public func getLiveConversionClauses() -> [LiveConversionClause] {
+        self.liveConversionPanelState.applying(to: self.rawLiveConversionClauses())
+    }
+
+    public func getLiveConversionPanelModel() -> LiveConversionPanelModel {
+        let clauses = self.rawLiveConversionClauses()
+        let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count)
+        return LiveConversionPanelModel.make(
+            clauses: clauses,
+            state: self.liveConversionPanelState,
+            targetCandidates: target.map { self.clauseCandidates(clauses[$0]) } ?? []
+        )
+    }
+
+    /// 変換パネルのキー操作。`.notHandled` のときは本来のキー処理に任せる
+    public func handleLiveConversionPanelKey(_ key: LiveConversionPanelState.Key) -> LiveConversionPanelState.Effect {
+        let clauses = self.rawLiveConversionClauses()
+        return self.liveConversionPanelState.handle(key, clauses: clauses) {
+            self.clauseCandidates(clauses[$0])
+        }
+    }
+
+    private func resetLiveConversionPanel() {
+        self.liveConversionPanelState = LiveConversionPanelState()
+        self.clauseCandidatesCache.removeAll()
+    }
+
+    /// 文節の候補。読みだけを Zenzai なしで別のセッションで変換し、結果は読みごとに使い回す
+    private func clauseCandidates(_ clause: LiveConversionClause) -> [String] {
+        let dictionaryCandidates: [String]
+        if let cached = self.clauseCandidatesCache[clause.reading] {
+            dictionaryCandidates = cached
+        } else if clause.reading.unicodeScalars.contains(where: \.isASCII) {
+            // 未変換のローマ字などは変換しない
+            dictionaryCandidates = []
+        } else {
+            dictionaryCandidates = self.convertClauseReading(clause.reading)
+            self.clauseCandidatesCache[clause.reading] = dictionaryCandidates
+        }
+        return LiveConversionPanelModel.candidates(
+            engineSurface: clause.surface,
+            reading: clause.reading,
+            dictionaryCandidates: dictionaryCandidates
+        )
+    }
+
+    private func convertClauseReading(_ reading: String) -> [String] {
+        let sessionID = self.clauseConversionSessionID ?? self.kanaKanjiConverter.createSession()
+        self.clauseConversionSessionID = sessionID
+        var text = ComposingText()
+        text.insertAtCursorPosition(reading, inputStyle: .direct)
+        let options = self.options(
+            leftSideContext: nil,
+            rightSideContext: nil,
+            requestRichCandidates: false,
+            requireJapanesePrediction: .disabled,
+            requireEnglishPrediction: .disabled,
+            useZenzai: false
+        )
+        guard let result = try? self.kanaKanjiConverter.withSession(sessionID, operation: {
+            self.kanaKanjiConverter.requestCandidates(text, options: options)
+        }) else {
+            return []
+        }
+        // 読み全体を覆う候補だけを使う
+        return (result.mainResults + result.firstClauseResults)
+            .filter { text.isWholeComposingText(composingCount: $0.composingCount) }
+            .map(\.text)
+    }
+
+    /// 変換パネルを使うときの未確定文字列。文節ごとに下線を分け、対象の文節を太くする
+    private func liveConversionPanelMarkedText() -> MarkedText {
+        let clauses = self.getLiveConversionClauses()
+        guard clauses.count > 1 else {
+            let text = clauses.map(\.surface).joined()
+            return MarkedText(text: [.init(content: text, focus: .none)], selectionRange: .notFound)
+        }
+        let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count)
+        let text = clauses.enumerated().map { index, clause in
+            MarkedText.Element(content: clause.surface, focus: index == target ? .focused : .unfocused)
+        }
+        let length = clauses.reduce(0) { $0 + $1.surface.utf16.count }
+        return MarkedText(text: text, selectionRange: NSRange(location: length, length: 0))
+    }
+
     // swiftlint:disable:next cyclomatic_complexity
     public func getCurrentMarkedText(inputState: InputState) -> MarkedText {
         switch inputState {
         case .none, .attachDiacritic:
             return MarkedText(text: [], selectionRange: .notFound)
         case .composing:
+            if self.liveConversionPanelEnabled {
+                return self.liveConversionPanelMarkedText()
+            }
             let text = if self.lastOperation == .delete {
                 // 削除のあとは常にひらがなを示す
                 self.composingText.convertTarget
