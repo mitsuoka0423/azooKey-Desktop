@@ -26,14 +26,15 @@ struct LiveConversionPanelStateTests {
         return state
     }
 
-    @Test("パネルが扱うキー。⇧← →、修飾キーつき、0 は本来のキー処理に任せる")
+    @Test("パネルが扱うキー。⇧← → は区切り。修飾キーつき、0 は本来のキー処理に任せる")
     func keyMapping() {
         typealias Key = LiveConversionPanelState.Key
         #expect(Key(userAction: .navigation(.left), modifiers: []) == .left)
         #expect(Key(userAction: .navigation(.down), modifiers: []) == .down)
         #expect(Key(userAction: .space(prefersFullWidthWhenInput: true), modifiers: []) == .space)
         #expect(Key(userAction: .number(.three), modifiers: []) == .number(3))
-        #expect(Key(userAction: .navigation(.left), modifiers: [.shift]) == nil)
+        #expect(Key(userAction: .navigation(.left), modifiers: [.shift]) == .shrink)
+        #expect(Key(userAction: .navigation(.right), modifiers: [.shift]) == .extend)
         #expect(Key(userAction: .tab, modifiers: [.option]) == nil)
         #expect(Key(userAction: .number(.zero), modifiers: []) == nil)
         #expect(Key(userAction: .enter, modifiers: []) == nil)
@@ -116,6 +117,81 @@ struct LiveConversionPanelStateTests {
         #expect(state.mode == .typing)
         #expect(!state.isExpanded)
         #expect(state.applying(to: Self.clauses)[2].surface == "箸を")
+    }
+
+    /// 読みからの表記（テスト用）
+    private static func convert(_ reading: String) -> String {
+        ["あしたはし": "明日橋", "の": "の", "あしたは": "明日は", "はしのは": "箸のは", "しを": "詩を", "はし": "橋", "のはしを": "の箸を"][reading] ?? reading
+    }
+
+    private static func resize(_ keys: [LiveConversionPanelState.Key], from state: LiveConversionPanelState = .init()) -> LiveConversionPanelState {
+        var state = state
+        for key in keys {
+            let base = state.segmented(clauses, convert: convert)
+            _ = state.handle(key, clauses: base, candidates: { [base[$0].surface] }, convert: convert)
+        }
+        return state
+    }
+
+    @Test("⇧→ で対象の文節を伸ばし、次の文節の先頭を取り込む")
+    func extendTakesNextHead() {
+        let state = Self.resize([.right, .extend])
+        let clauses = state.applying(to: state.segmented(Self.clauses, convert: Self.convert))
+        #expect(clauses.map(\.reading) == ["あしたはは", "しの", "はしを", "わたる"])
+        #expect(state.mode == .selecting(0))
+    }
+
+    @Test("⇧← で対象の文節を縮め、末尾を次の文節へ送る。最後の文節なら新しい文節にする")
+    func shrinkPushesTail() {
+        let first = Self.resize([.right, .shrink])
+        #expect(first.applying(to: first.segmented(Self.clauses, convert: Self.convert)).map(\.reading) == ["あした", "ははしの", "はしを", "わたる"])
+
+        let last = Self.resize([.left, .shrink])
+        let clauses = last.applying(to: last.segmented(Self.clauses, convert: Self.convert))
+        #expect(clauses.map(\.reading) == ["あしたは", "はしの", "はしを", "わた", "る"])
+    }
+
+    @Test("入力中に ⇧← を押すと、対象の文節を選んでから区切る")
+    func resizeWhileTyping() {
+        let state = Self.resize([.shrink])
+        #expect(state.mode == .selecting(3))
+    }
+
+    @Test("区切りは 1 文字より短くしない。後ろに文節がなければ伸ばさない")
+    func resizeLimits() {
+        var state = Self.resize([.left])
+        let base = state.segmented(Self.clauses, convert: Self.convert)
+        _ = state.handle(.extend, clauses: base, candidates: { _ in [] }, convert: Self.convert)
+        #expect(state.overrides.isEmpty)
+        let single: [LiveConversionClause] = [.init(reading: "あ", surface: "亜")]
+        var one = LiveConversionPanelState()
+        _ = one.handle(.shrink, clauses: single, candidates: { _ in [] })
+        #expect(one.overrides.isEmpty)
+    }
+
+    @Test("区切りは、読みが変わらないかぎり変換し直しても保つ。区切った文節で候補を選んでも区切りは残る")
+    func boundaryFollowsReconversion() {
+        var state = Self.resize([.right, .extend])
+        // エンジンが区切りを変えても、読みが同じなら区切りを保つ
+        let reconverted: [LiveConversionClause] = [
+            .init(reading: "あしたはは", surface: "明日母"),
+            .init(reading: "しのはしを", surface: "篠橋を"),
+            .init(reading: "わたる", surface: "渡る"),
+            .init(reading: "ひと", surface: "人")
+        ]
+        let base = state.segmented(reconverted, convert: Self.convert)
+        #expect(base.map(\.reading) == ["あしたはは", "しの", "はしを", "わたる", "ひと"])
+        state.dropOverrides(notMatching: base)
+        #expect(state.overrides.count == 2)
+
+        _ = state.handle(.down, clauses: base, candidates: { _ in ["一", "二"] }, convert: Self.convert)
+        #expect(state.overrides.allSatisfy { $0.isBoundary })
+
+        // 読みが変わったら区切りを外す
+        let edited: [LiveConversionClause] = [.init(reading: "あしたか", surface: "明日か")]
+        let editedBase = state.segmented(edited, convert: Self.convert)
+        state.dropOverrides(notMatching: editedBase)
+        #expect(state.overrides.isEmpty)
     }
 
     @Test("変換し直して同じ位置・同じ読みの文節があれば表記を保ち、なければ外す")

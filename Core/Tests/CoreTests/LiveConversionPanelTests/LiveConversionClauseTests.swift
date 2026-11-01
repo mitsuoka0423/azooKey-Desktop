@@ -138,6 +138,29 @@ struct LiveConversionClauseTests {
     }
 
     @MainActor
+    @Test("実際の変換：⇧← で区切りを直すと、続けて入力しても区切りを保つ")
+    func fixBoundary() {
+        let manager = SegmentsManager(
+            kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+            applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+            containerURL: nil,
+            context: .init(useZenzai: false)
+        )
+        manager.insertAtCursorPosition("asitahasino", inputStyle: .roman2kana)
+        #expect(manager.getLiveConversionClauses().map(\.reading) == ["あしたは", "しの"])
+
+        // 最初の文節を選び、1 文字縮めて「は」を次の文節へ送る
+        #expect(manager.handleLiveConversionPanelKey(.right) == .handled)
+        #expect(manager.handleLiveConversionPanelKey(.shrink) == .handled)
+        #expect(manager.getLiveConversionClauses().map(\.reading) == ["あした", "はしの"])
+        #expect(manager.getLiveConversionClauses().first?.surface == "明日")
+
+        manager.insertAtCursorPosition("hasiwo", inputStyle: .roman2kana)
+        let clauses = manager.getLiveConversionClauses()
+        #expect(Array(clauses.map(\.reading).prefix(2)) == ["あした", "はしの"])
+    }
+
+    @MainActor
     @Test("実際の変換：途中の文節で選んだ候補は、続けて入力しても保つ")
     func keepSelectionWhileTyping() {
         let manager = SegmentsManager(

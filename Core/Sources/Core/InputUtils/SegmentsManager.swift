@@ -620,7 +620,7 @@ public final class SegmentsManager {
         self.rawCandidates = result
         // 削除のあとは本文がひらがなに戻るだけなので、選んだ表記は次の変換まで残す
         if self.lastOperation != .delete {
-            self.liveConversionPanelState.dropOverrides(notMatching: self.rawLiveConversionClauses())
+            self.liveConversionPanelState.dropOverrides(notMatching: self.baseLiveConversionClauses())
         }
     }
 
@@ -1153,13 +1153,23 @@ public final class SegmentsManager {
         return LiveConversionClause.clauses(convertTarget: self.composingText.convertTarget, candidate: candidate)
     }
 
-    /// 変換パネルに出す文節の列。ユーザーが選んだ表記を覆いかぶせる
+    /// エンジンの文節の列に、⇧← → で変えた区切りを当てたもの。表記の覆いかぶせはまだ当てない
+    private func baseLiveConversionClauses() -> [LiveConversionClause] {
+        self.liveConversionPanelState.segmented(self.rawLiveConversionClauses(), convert: self.topSurface(for:))
+    }
+
+    /// 区切りを変えた文節の表記。読みを辞書変換した 1 位（なければ読みのまま）
+    private func topSurface(for reading: String) -> String {
+        self.dictionaryCandidates(for: reading).first?.text ?? reading
+    }
+
+    /// 変換パネルに出す文節の列。ユーザーが変えた区切りと選んだ表記を覆いかぶせる
     public func getLiveConversionClauses() -> [LiveConversionClause] {
-        self.liveConversionPanelState.applying(to: self.rawLiveConversionClauses())
+        self.liveConversionPanelState.applying(to: self.baseLiveConversionClauses())
     }
 
     public func getLiveConversionPanelModel() -> LiveConversionPanelModel {
-        let clauses = self.rawLiveConversionClauses()
+        let clauses = self.baseLiveConversionClauses()
         let lowConfidence = self.lowConfidenceClauses(clauses)
         let target = self.liveConversionPanelState.targetIndex(clauseCount: clauses.count, lowConfidence: lowConfidence)
         return LiveConversionPanelModel.make(
@@ -1178,10 +1188,14 @@ public final class SegmentsManager {
 
     /// 変換パネルのキー操作。`.notHandled` のときは本来のキー処理に任せる
     public func handleLiveConversionPanelKey(_ key: LiveConversionPanelState.Key) -> LiveConversionPanelState.Effect {
-        let clauses = self.rawLiveConversionClauses()
-        return self.liveConversionPanelState.handle(key, clauses: clauses, lowConfidence: self.lowConfidenceClauses(clauses)) {
-            self.clauseCandidates(clauses[$0])
-        }
+        let clauses = self.baseLiveConversionClauses()
+        return self.liveConversionPanelState.handle(
+            key,
+            clauses: clauses,
+            lowConfidence: self.lowConfidenceClauses(clauses),
+            candidates: { self.clauseCandidates(clauses[$0]) },
+            convert: self.topSurface(for:)
+        )
     }
 
     private func resetLiveConversionPanel() {
@@ -1257,7 +1271,7 @@ public final class SegmentsManager {
         }
         let target = self.liveConversionPanelState.targetIndex(
             clauseCount: clauses.count,
-            lowConfidence: self.lowConfidenceClauses(self.rawLiveConversionClauses())
+            lowConfidence: self.lowConfidenceClauses(self.baseLiveConversionClauses())
         )
         let text = clauses.enumerated().map { index, clause in
             MarkedText.Element(content: clause.surface, focus: index == target ? .focused : .unfocused)
