@@ -106,10 +106,22 @@ public enum MixedInputDetector {
             var elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)] = []
             var position = 0
             for element in reading.elements {
-                elementRanges.append((position..<(position + element.ruby.count), element.mid != MixedInputDetector.unknownWordMid))
+                elementRanges.append((position..<(position + element.ruby.count), Self.isDictionaryWord(element)))
                 position += element.ruby.count
             }
             self.elementRanges = elementRanges
+        }
+
+        /// 辞書の語として数えるか。辞書にない字の並べ方で埋めた要素と、学習から来たかなだけの語
+        /// （英単語をローマ字のつもりで打って確定した「コッミツィテ」など）は数えない
+        private static func isDictionaryWord(_ element: DicdataElement) -> Bool {
+            if element.mid == MixedInputDetector.unknownWordMid {
+                return false
+            }
+            if element.metadata.contains(.isLearned), LiveConversionConfidence.isKanaOnly(element.word) {
+                return false
+            }
+            return true
         }
 
         func englishRanges(avoiding ruleRanges: [Range<Int>]) -> [Range<Int>] {

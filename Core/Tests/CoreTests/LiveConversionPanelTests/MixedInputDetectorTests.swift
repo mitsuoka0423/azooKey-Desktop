@@ -48,6 +48,22 @@ struct MixedInputDetectorTests {
         #expect(Self.english("korehaGitHubnopullrequestdesu") == ["GitHub", "pullrequest"])
     }
 
+    @Test("日本語として読んだ語が辞書の語なら日本語、学習から来たかなだけの語なら英語")
+    func learnedKanaWord() {
+        let chars = Array("commitsite")
+        func english(_ metadata: DicdataElementMetadata) -> [String] {
+            let element = DicdataElement(word: "コッミツィテ", ruby: "コッミツィテ", cid: CIDData.一般名詞.cid, mid: 100, value: -10, metadata: metadata)
+            return MixedInputDetector.englishRanges(
+                in: chars,
+                inputStyle: .roman2kana,
+                japaneseReading: .init(elements: [element]),
+                checker: WordListChecker()
+            ).map { String(chars[$0]) }
+        }
+        #expect(english(.isLearned) == ["commit"])
+        #expect(english(.empty).isEmpty)
+    }
+
     @Test("ローマ字としても読める英単語は日本語のまま（候補から選ぶ）")
     func ambiguousStaysJapanese() {
         #expect(Self.english("branchwokittekaracommitsuru") == ["branch"])
