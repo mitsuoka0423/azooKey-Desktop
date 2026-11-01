@@ -36,6 +36,8 @@ public struct LiveConversionPanelState: Sendable, Equatable {
         case shrink
         /// ⇧→：対象の文節を 1 文字伸ばす
         case extend
+        /// Shift+Space：英単語どうしの間などに空白をそのまま入れる
+        case literalSpace
 
         /// キー操作のうち、パネルが扱うもの。修飾キーつき（⇧ を除く）は本来のキー処理に任せる
         public init?(userAction: UserAction, modifiers: KeyEventCore.ModifierFlag) {
@@ -52,7 +54,7 @@ public struct LiveConversionPanelState: Sendable, Equatable {
             case .navigation(.down):
                 self = .down
             case .space:
-                self = .space
+                self = modifiers.contains(.shift) ? .literalSpace : .space
             case .tab:
                 self = .tab
             case .escape:
@@ -194,7 +196,7 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     /// - Parameters:
     ///   - clauses: 覆いかぶせを当てる前の文節の列
     ///   - candidates: 文節の位置を受け取り、その文節の候補（先頭がエンジンの表記）を返す
-    public mutating func handle(
+    public mutating func handle( // swiftlint:disable:this cyclomatic_complexity
         _ key: Key,
         clauses: [LiveConversionClause],
         lowConfidence: Set<Int> = [],
@@ -219,6 +221,9 @@ public struct LiveConversionPanelState: Sendable, Equatable {
             self.select(clauses[target].reading, at: target, in: clauses)
         case .shrink, .extend:
             self.resize(by: key == .extend ? 1 : -1, at: target, in: clauses, convert: convert)
+        case .literalSpace:
+            // 空白を入れるのは入力の変更なので、SegmentsManager が受け持つ
+            return .notHandled
         case .number(let number):
             // 数字で選べるのは文節を選んでいる間だけ。入力中は数字の入力にする
             guard case .selecting = self.mode else {

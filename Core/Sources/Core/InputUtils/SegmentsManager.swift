@@ -20,13 +20,16 @@ public final class SegmentsManager {
     /// テストなどの設定注入のための型。外部には設定を露出させない。
     public struct Context {
         public init() {}
-        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil) {
+        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil, forceLiveConversionPanel: Bool = false) {
             self.useZenzai = useZenzai
             self.resourcesDirectoryURL = resourcesDirectoryURL
+            self.forceLiveConversionPanel = forceLiveConversionPanel
         }
 
         var useZenzai: Bool = true
         var resourcesDirectoryURL: URL?
+        /// 設定に関わらず変換パネルをオンとして扱う（テスト用）
+        var forceLiveConversionPanel = false
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
@@ -68,8 +71,10 @@ public final class SegmentsManager {
     private var rawCandidates: ConversionResult?
 
     private var liveConversionPanelEnabled: Bool {
-        Config.LiveConversionPanel().value && self.liveConversionEnabled
+        (self.context.forceLiveConversionPanel || Config.LiveConversionPanel().value) && self.liveConversionEnabled
     }
+    /// 日本語と英語の混在入力に使う英単語の判定。`nil` なら混在入力の見分けをしない
+    public var englishWordChecker: (any EnglishWordChecker)?
     /// 変換パネルのキー操作による状態（選んだ文節の表記など）
     private var liveConversionPanelState = LiveConversionPanelState()
     /// 文節の読みごとの辞書変換の候補。変換パネルの候補リストに使い回す
@@ -359,6 +364,7 @@ public final class SegmentsManager {
         self.composingText.insertAtCursorPosition(string, inputStyle: inputStyle)
         self.lastOperation = .insert
         self.liveConversionPanelState.didEditText()
+        self.applyMixedInputDetection()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -370,6 +376,7 @@ public final class SegmentsManager {
         self.composingText.insertAtCursorPosition(pieces.map { .init(piece: $0, inputStyle: inputStyle) })
         self.lastOperation = .insert
         self.liveConversionPanelState.didEditText()
+        self.applyMixedInputDetection()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -419,6 +426,7 @@ public final class SegmentsManager {
         self.composingText.deleteBackwardFromCursorPosition(count: count)
         self.lastOperation = .delete
         self.liveConversionPanelState.didEditText()
+        self.applyMixedInputDetection()
         // ライブ変換がオフの場合は変換候補ウィンドウを出したい
         self.shouldShowCandidateWindow = !self.liveConversionEnabled
         self.updateRawCandidate()
@@ -1177,7 +1185,7 @@ public final class SegmentsManager {
             clauses: clauses,
             state: self.liveConversionPanelState,
             lowConfidence: lowConfidence,
-            targetCandidates: target.map { self.clauseCandidates(clauses[$0]) } ?? [],
+            targetCandidates: target.map { self.clauseCandidates(clauses, at: $0) } ?? [],
             hint: { candidate in
                 guard let target else {
                     return ""
@@ -1188,15 +1196,65 @@ public final class SegmentsManager {
     }
 
     /// 変換パネルのキー操作。`.notHandled` のときは本来のキー処理に任せる
+    @MainActor
     public func handleLiveConversionPanelKey(_ key: LiveConversionPanelState.Key) -> LiveConversionPanelState.Effect {
+        if key == .literalSpace {
+            // 空白はそのまま入れる。日本語の入力方式（lastInputStyle）は変えない
+            self.composingText.insertAtCursorPosition(" ", inputStyle: .direct)
+            self.lastOperation = .insert
+            self.liveConversionPanelState.didEditText()
+            self.applyMixedInputDetection()
+            self.updateRawCandidate()
+            return .handled
+        }
         let clauses = self.baseLiveConversionClauses()
         return self.liveConversionPanelState.handle(
             key,
             clauses: clauses,
             lowConfidence: self.lowConfidenceClauses(clauses),
-            candidates: { self.clauseCandidates(clauses[$0]) },
+            candidates: { self.clauseCandidates(clauses, at: $0) },
             convert: self.topSurface(for:)
         )
+    }
+
+    /// 日本語と英語が混ざった入力のうち、英単語の部分を英字のままエンジンに渡すよう、入力方式を付け替える
+    private func applyMixedInputDetection() {
+        guard self.liveConversionPanelEnabled,
+              let checker = self.englishWordChecker,
+              self.lastInputStyle != .direct,
+              self.composingText.isAtEndIndex else {
+            return
+        }
+        let elements = self.composingText.input
+        var typed: [Character] = []
+        for element in elements {
+            guard let character = Self.typedCharacter(element.piece) else {
+                // 変換キーの区切りなどが入っているときは触らない
+                return
+            }
+            typed.append(character)
+        }
+        let englishRanges = MixedInputDetector.englishRanges(in: typed, inputStyle: self.lastInputStyle, checker: checker)
+        let styles: [InputStyle] = typed.indices.map { index in
+            typed[index] == " " || englishRanges.contains { $0.contains(index) } ? .direct : self.lastInputStyle
+        }
+        guard styles != elements.map(\.inputStyle) else {
+            return
+        }
+        var rebuilt = ComposingText()
+        rebuilt.insertAtCursorPosition(zip(elements, styles).map { .init(piece: $0.piece, inputStyle: $1) })
+        self.composingText = rebuilt
+    }
+
+    private static func typedCharacter(_ piece: InputPiece) -> Character? {
+        switch piece {
+        case .character(let character):
+            character
+        case .key(let intention, let input, _):
+            intention ?? input
+        case .compositionSeparator:
+            nil
+        }
     }
 
     private func resetLiveConversionPanel() {
@@ -1216,13 +1274,39 @@ public final class SegmentsManager {
         })
     }
 
-    /// 文節の候補。先頭は本文の表記
-    private func clauseCandidates(_ clause: LiveConversionClause) -> [String] {
-        LiveConversionPanelModel.candidates(
+    /// 文節の候補。先頭は本文の表記。打ったキーの並びが英単語なら 2 番目にそれを置く（「来て」に対する「kite」）
+    private func clauseCandidates(_ clauses: [LiveConversionClause], at index: Int) -> [String] {
+        let clause = clauses[index]
+        var dictionaryCandidates = self.dictionaryCandidates(for: clause.reading).map(\.text)
+        if let typed = self.typedEnglishWord(clauses, at: index) {
+            dictionaryCandidates.insert(typed, at: 0)
+        }
+        return LiveConversionPanelModel.candidates(
             engineSurface: clause.surface,
             reading: clause.reading,
-            dictionaryCandidates: self.dictionaryCandidates(for: clause.reading).map(\.text)
+            dictionaryCandidates: dictionaryCandidates
         )
+    }
+
+    private func typedEnglishWord(_ clauses: [LiveConversionClause], at index: Int) -> String? {
+        guard let checker = self.englishWordChecker else {
+            return nil
+        }
+        let start = LiveConversionPanelState.starts(of: clauses)[index]
+        // 文節の末尾の助詞などは除き、語の部分だけを打ったとおりにする（「kitewo」→「kite」＋「を」）
+        let reading = clauses[index].reading
+        for length in stride(from: reading.count, through: 1, by: -1) {
+            guard let typed = MixedInputDetector.typedText(forConvertTargetRange: start..<(start + length), in: self.composingText.input),
+                  typed.count >= 3,
+                  typed.allSatisfy({ $0.isASCII && $0.isLetter }),
+                  checker.isEnglishWord(typed.lowercased()) else {
+                continue
+            }
+            let rest = String(reading.dropFirst(length))
+            let candidate = typed + rest
+            return candidate == clauses[index].surface ? nil : candidate
+        }
+        return nil
     }
 
     /// 文節の読みだけを Zenzai なしで別のセッションで変換した候補（エンジンが返した順）。結果は読みごとに使い回す

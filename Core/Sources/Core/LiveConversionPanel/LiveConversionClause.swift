@@ -56,10 +56,28 @@ public extension LiveConversionClause {
             )
         }
 
+        result = Self.mergingASCIIWords(result)
+
         let coveredCount = result.reduce(0) { $0 + $1.reading.count }
         if coveredCount < convertTarget.count {
             let tail = String(convertTarget.dropFirst(coveredCount))
             result.append(.init(reading: tail, surface: tail))
+        }
+        return result
+    }
+
+    /// エンジンは英字を 1 文字ずつ別の語として返すので、英字の並びを 1 つの文節にまとめる。
+    /// 英字の後ろに英字や空白が続く間は同じ文節にし、空白のあとから新しい文節にする（「Stacked 」「PRにして」）
+    static func mergingASCIIWords(_ clauses: [LiveConversionClause]) -> [LiveConversionClause] {
+        var result: [LiveConversionClause] = []
+        for clause in clauses {
+            if let last = result.last?.surface.last, last.isASCII, last.isLetter,
+               let first = clause.surface.first, first.isASCII, first.isLetter || first == " " {
+                result[result.count - 1].reading += clause.reading
+                result[result.count - 1].surface += clause.surface
+            } else {
+                result.append(clause)
+            }
         }
         return result
     }
