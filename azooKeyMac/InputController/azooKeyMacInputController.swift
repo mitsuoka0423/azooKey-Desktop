@@ -142,6 +142,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesViewController.delegate = self
         self.replaceSuggestionsViewController.delegate = self
         self.segmentsManager.delegate = self
+        self.segmentsManager.englishWordChecker = SpellCheckerEnglishWordChecker()
         self.setupMenu()
     }
 
