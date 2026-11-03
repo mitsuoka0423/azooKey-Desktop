@@ -13,6 +13,9 @@ public extension LiveConversionHintProvider {
         if candidate == LiveConversionPanelModel.katakana(reading) {
             return "カタカナ"
         }
+        if candidate.contains(where: \.isLetter), candidate.allSatisfy(\.isASCII) {
+            return "英字"
+        }
         if let hint = self.hint(for: candidate, reading: reading) {
             return hint
         }

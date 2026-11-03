@@ -293,4 +293,16 @@ struct LiveConversionPanelModelTests {
         let many = (1...20).map { "候補\($0)" }
         #expect(LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: many).count == 9)
     }
+
+    @Test("ひらがな・カタカナ・打ったとおりの英字は、辞書の候補が多くても残る")
+    func fixedCandidatesStay() {
+        let many = (1...20).map { "候補\($0)" }
+        let result = LiveConversionPanelModel.candidates(engineSurface: "後地", reading: "のっち", dictionaryCandidates: many + ["ノッチ"], typed: "notti")
+        #expect(result.count == 9)
+        #expect(result.first == "後地")
+        #expect(Array(result.suffix(3)) == ["ノッチ", "のっち", "notti"])
+        // 本文がすでにカタカナなら、カタカナは重ねない
+        #expect(LiveConversionPanelModel.candidates(engineSurface: "ノッチ", reading: "のっち", dictionaryCandidates: [], typed: "notti")
+                    == ["ノッチ", "のっち", "notti"])
+    }
 }

@@ -1379,8 +1379,20 @@ public final class SegmentsManager {
         return LiveConversionPanelModel.candidates(
             engineSurface: clause.surface,
             reading: clause.reading,
-            dictionaryCandidates: dictionaryCandidates
+            dictionaryCandidates: dictionaryCandidates,
+            typed: self.typedLetters(clauses, at: index)
         )
+    }
+
+    /// 文節を打ったとおりの英字（「ノッチ」に対する「notti」）。英字以外のキーを含むときは出さない
+    private func typedLetters(_ clauses: [LiveConversionClause], at index: Int) -> String? {
+        let start = LiveConversionPanelState.starts(of: clauses)[index]
+        guard let typed = MixedInputDetector.typedText(forConvertTargetRange: start..<(start + clauses[index].reading.count), in: self.composingText.input),
+              typed.contains(where: \.isLetter),
+              typed.allSatisfy(\.isASCII) else {
+            return nil
+        }
+        return typed
     }
 
     private func typedEnglishWord(_ clauses: [LiveConversionClause], at index: Int) -> String? {
