@@ -62,8 +62,20 @@ struct LiveConversionClauseTests {
         let clauses = LiveConversionClause.clauses(convertTarget: "ありがt", candidate: candidate)
         #expect(clauses == [
             .init(reading: "ありが", surface: "有賀"),
-            .init(reading: "t", surface: "t")
+            .init(reading: "t", surface: "t", isUnconverted: true)
         ])
+    }
+
+    @Test("末尾の打ちかけのローマ字を、変換しない文節として分ける")
+    func marksUnconvertedTail() {
+        let clauses: [LiveConversionClause] = [.init(reading: "きょうは", surface: "今日は"), .init(reading: "でs", surface: "でs")]
+        #expect(LiveConversionClause.markingUnconvertedTail(clauses, count: 1) == [
+            .init(reading: "きょうは", surface: "今日は"),
+            .init(reading: "で", surface: "で"),
+            .init(reading: "s", surface: "s", isUnconverted: true)
+        ])
+        let english: [LiveConversionClause] = [.init(reading: "は", surface: "は"), .init(reading: "branch", surface: "branch")]
+        #expect(LiveConversionClause.markingUnconvertedTail(english, count: 0) == english)
     }
 
     @Test("候補がなければ読みをそのまま 1 つの文節にする")
@@ -108,7 +120,7 @@ struct LiveConversionClauseTests {
             .init(reading: "わたしは", surface: "私は"),
             .init(reading: "がくせいです", surface: "学生です")
         ])
-        #expect(clauses("arigat").last == .init(reading: "t", surface: "t"))
+        #expect(clauses("arigat").last == .init(reading: "t", surface: "t", isUnconverted: true))
     }
 
     @MainActor
