@@ -42,6 +42,11 @@ public enum MixedInputDetector {
     /// 英単語として探す最大の長さ
     fileprivate static let maxWordLength = 15
 
+    /// 促音（っ）として重ねた子音の組か（notti の tt）。w は review｜wo のように英単語の末尾と「を」が重なるので除く
+    static func isSokuonPair(_ previous: Character, _ next: Character) -> Bool {
+        previous == next && "bcdfghjkmprstz".contains(next)
+    }
+
     /// 打った文字を全部日本語として読んで変換したときの 1 位の語の並び
     public struct JapaneseReading: Sendable {
         public var elements: [DicdataElement]
@@ -197,8 +202,7 @@ public enum MixedInputDetector {
             if "aiueoy".contains(self.chars[end]) {
                 return true
             }
-            // w は review｜wo のように英単語の末尾と「を」が重なるので除く
-            if self.chars[end] == self.chars[end - 1], "bcdfghjkmprstz".contains(self.chars[end]) {
+            if MixedInputDetector.isSokuonPair(self.chars[end - 1], self.chars[end]) {
                 return true
             }
             return self.chars[end] == "h" && "cdstw".contains(self.chars[end - 1])

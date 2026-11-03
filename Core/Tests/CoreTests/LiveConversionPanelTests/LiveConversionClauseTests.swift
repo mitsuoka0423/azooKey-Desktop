@@ -208,9 +208,12 @@ struct LiveConversionClauseTests {
             kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
             applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
             containerURL: nil,
-            context: .init(useZenzai: false)
+            context: .init(useZenzai: false, forceLiveConversionPanel: true)
         )
-        manager.insertAtCursorPosition("notti", inputStyle: .roman2kana)
+        manager.englishWordChecker = WordListChecker.adding(["not"])
+        for character in "notti" {
+            manager.insertAtCursorPosition(String(character), inputStyle: .roman2kana)
+        }
         _ = manager.handleLiveConversionPanelKey(.left)
         _ = manager.handleLiveConversionPanelKey(.tab)
         let items = manager.getLiveConversionPanelModel().candidateList?.items ?? []
@@ -218,5 +221,7 @@ struct LiveConversionClauseTests {
         #expect(hints["のっち"] == "ひらがな")
         #expect(hints["ノッチ"] == "カタカナ")
         #expect(hints["notti"] == "英字")
+        // 促音の重ねた子音の間で切った「not＋ち」は出さない
+        #expect(hints["notち"] == nil)
     }
 }

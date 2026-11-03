@@ -1402,10 +1402,13 @@ public final class SegmentsManager {
         let start = LiveConversionPanelState.starts(of: clauses)[index]
         // 文節の末尾の助詞などは除き、語の部分だけを打ったとおりにする（「kitewo」→「kite」＋「を」）
         let reading = clauses[index].reading
+        let whole = MixedInputDetector.typedText(forConvertTargetRange: start..<(start + reading.count), in: self.composingText.input) ?? ""
         for length in stride(from: reading.count, through: 1, by: -1) {
             guard let typed = MixedInputDetector.typedText(forConvertTargetRange: start..<(start + length), in: self.composingText.input),
                   typed.count >= 3,
                   typed.allSatisfy({ $0.isASCII && $0.isLetter }),
+                  // 促音の重ねた子音の間では切らない（notti を「notち」にしない）
+                  !(whole.count > typed.count && MixedInputDetector.isSokuonPair(typed.last!, whole[whole.index(whole.startIndex, offsetBy: typed.count)])),
                   checker.isEnglishWord(typed.lowercased()) else {
                 continue
             }
