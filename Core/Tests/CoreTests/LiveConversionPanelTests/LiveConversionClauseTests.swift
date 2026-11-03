@@ -199,4 +199,28 @@ struct LiveConversionClauseTests {
         #expect(clauses.map(\.surface).joined().hasPrefix("橋の箸を"))
         #expect(manager.getLiveConversionPanelModel().columns.last?.isTarget == true)
     }
+
+    @MainActor
+    @Test("実際の変換：辞書にない語でも、ひらがな・カタカナ・打ったとおりの英字を選べる")
+    func kanaAndTypedLetters() {
+        let manager = SegmentsManager(
+            kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
+            applicationDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+            containerURL: nil,
+            context: .init(useZenzai: false, forceLiveConversionPanel: true)
+        )
+        manager.englishWordChecker = WordListChecker.adding(["not"])
+        for character in "notti" {
+            manager.insertAtCursorPosition(String(character), inputStyle: .roman2kana)
+        }
+        _ = manager.handleLiveConversionPanelKey(.left)
+        _ = manager.handleLiveConversionPanelKey(.tab)
+        let items = manager.getLiveConversionPanelModel().candidateList?.items ?? []
+        let hints = Dictionary(uniqueKeysWithValues: items.map { ($0.text, $0.hint) })
+        #expect(hints["のっち"] == "ひらがな")
+        #expect(hints["ノッチ"] == "カタカナ")
+        #expect(hints["notti"] == "英字")
+        // 促音の重ねた子音の間で切った「not＋ち」は出さない
+        #expect(hints["notち"] == nil)
+    }
 }
