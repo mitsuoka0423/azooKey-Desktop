@@ -83,10 +83,6 @@ final class LiveConversionCandidateListView: NSView {
     }
 
     private static func makeRow(_ item: LiveConversionPanelModel.CandidateItem, isSelected: Bool) -> NSView {
-        let number = NSTextField(labelWithString: "\(item.number)")
-        number.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        number.textColor = isSelected ? .alternateSelectedControlTextColor : .secondaryLabelColor
-
         let text = NSTextField(labelWithString: item.text)
         text.font = .systemFont(ofSize: 13)
         text.textColor = isSelected ? .alternateSelectedControlTextColor : .labelColor
@@ -96,14 +92,14 @@ final class LiveConversionCandidateListView: NSView {
         hint.textColor = isSelected ? .alternateSelectedControlTextColor : .secondaryLabelColor
         hint.alignment = .right
 
-        let stack = NSStackView(views: [number, text, hint])
+        let stack = NSStackView(views: [text, hint])
         stack.orientation = .horizontal
         stack.spacing = 8
         stack.setClippingResistancePriority(.required, for: .horizontal)
         // 意味の手がかりは右寄せにする。どの欄も縮めず、リストの幅を広げる
         hint.setContentHuggingPriority(.defaultLow, for: .horizontal)
         text.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        [number, text, hint].forEach { $0.setContentCompressionResistancePriority(.required, for: .horizontal) }
+        [text, hint].forEach { $0.setContentCompressionResistancePriority(.required, for: .horizontal) }
         return RoundedFillView(
             content: stack,
             fillColor: isSelected ? .controlAccentColor : nil,

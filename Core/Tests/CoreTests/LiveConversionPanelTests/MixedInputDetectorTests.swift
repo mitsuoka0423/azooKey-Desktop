@@ -185,14 +185,17 @@ struct MixedInputConversionTests {
         let manager = Self.manager()
         Self.type(manager, "asitahabranchwokiru")
         #expect(manager.getLiveConversionClauses().first?.reading == "あしたは")
-        _ = manager.handleLiveConversionPanelKey(.right)
+        // ← で最初の文節まで動かす
+        for _ in manager.getLiveConversionClauses() {
+            _ = manager.handleLiveConversionPanelKey(.left)
+        }
         #expect(manager.handleLiveConversionPanelKey(.extend) == .handled)
         #expect(manager.getLiveConversionClauses().map(\.reading).prefix(2) == ["あしたはb", "ranchをきる"])
 
         let typing = Self.manager()
         Self.type(typing, "kyouhat")
         #expect(typing.getLiveConversionClauses().last == .init(reading: "t", surface: "t", isUnconverted: true))
-        _ = typing.handleLiveConversionPanelKey(.right)
+        _ = typing.handleLiveConversionPanelKey(.left)
         _ = typing.handleLiveConversionPanelKey(.extend)
         #expect(typing.getLiveConversionClauses().map(\.reading) == ["きょうは", "t"])
     }

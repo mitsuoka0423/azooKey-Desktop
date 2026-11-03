@@ -31,7 +31,6 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     /// パネルが扱うキー
     public enum Key: Sendable, Equatable {
         case left, right, up, down, space, tab, escape
-        case number(Int)
         /// ⇧←：対象の文節を 1 文字縮める
         case shrink
         /// ⇧→：対象の文節を 1 文字伸ばす
@@ -59,8 +58,6 @@ public struct LiveConversionPanelState: Sendable, Equatable {
                 self = .tab
             case .escape:
                 self = .escape
-            case .number(let number) where (1...9).contains(number.intValue):
-                self = .number(number.intValue)
             default:
                 return nil
             }
@@ -196,7 +193,7 @@ public struct LiveConversionPanelState: Sendable, Equatable {
     /// - Parameters:
     ///   - clauses: 覆いかぶせを当てる前の文節の列
     ///   - candidates: 文節の位置を受け取り、その文節の候補（先頭がエンジンの表記）を返す
-    public mutating func handle( // swiftlint:disable:this cyclomatic_complexity
+    public mutating func handle(
         _ key: Key,
         clauses: [LiveConversionClause],
         lowConfidence: Set<Int> = [],
@@ -224,27 +221,13 @@ public struct LiveConversionPanelState: Sendable, Equatable {
         case .literalSpace:
             // 空白を入れるのは入力の変更なので、SegmentsManager が受け持つ
             return .notHandled
-        case .number(let number):
-            // 数字で選べるのは文節を選んでいる間だけ。入力中は数字の入力にする
-            guard case .selecting = self.mode else {
-                return .notHandled
-            }
-            let list = candidates(target)
-            if number >= 1, number <= self.visibleCandidateCount(total: list.count) {
-                self.select(list[number - 1], at: target, in: clauses)
-            }
         }
         return .handled
     }
 
+    /// 表示中の対象から 1 つ動かす。入力中に押したときも、自動で決まった対象から動かす
     private mutating func moveTarget(by delta: Int, from target: Int, clauseCount: Int) {
-        switch self.mode {
-        case .typing:
-            // 入力中に押すと文節選択に入る。← は最後の文節、→ は最初の文節から
-            self.mode = .selecting(delta < 0 ? clauseCount - 1 : 0)
-        case .selecting:
-            self.mode = .selecting(min(max(target + delta, 0), clauseCount - 1))
-        }
+        self.mode = .selecting(min(max(target + delta, 0), clauseCount - 1))
         self.isExpanded = false
     }
 

@@ -143,8 +143,7 @@ struct LiveConversionClauseTests {
         #expect(hints["箸を"] == "食事の道具")
         #expect(hints["はしを"] == "ひらがな")
 
-        // 候補を選ぶと印は消える
-        _ = manager.handleLiveConversionPanelKey(.left)
+        // 候補を選ぶと印は消える（入力中の ↓ は、自動で決まった対象の文節に効く）
         _ = manager.handleLiveConversionPanelKey(.down)
         #expect(manager.getLiveConversionPanelModel().columns.first { $0.reading == "はしを" }?.isLowConfidence == false)
     }
@@ -161,8 +160,8 @@ struct LiveConversionClauseTests {
         manager.insertAtCursorPosition("asitahasino", inputStyle: .roman2kana)
         #expect(manager.getLiveConversionClauses().map(\.reading) == ["あしたは", "しの"])
 
-        // 最初の文節を選び、1 文字縮めて「は」を次の文節へ送る
-        #expect(manager.handleLiveConversionPanelKey(.right) == .handled)
+        // 最後の文節から ← で最初の文節を選び、1 文字縮めて「は」を次の文節へ送る
+        #expect(manager.handleLiveConversionPanelKey(.left) == .handled)
         #expect(manager.handleLiveConversionPanelKey(.shrink) == .handled)
         #expect(manager.getLiveConversionClauses().map(\.reading) == ["あした", "はしの"])
         #expect(manager.getLiveConversionClauses().first?.surface == "明日")
@@ -186,8 +185,8 @@ struct LiveConversionClauseTests {
         manager.insertAtCursorPosition("hasinohasiwo", inputStyle: .roman2kana)
         #expect(manager.getLiveConversionClauses().map(\.reading) == ["はしの", "はしを"])
 
-        // 最後の文節を選んで、候補リストから「箸を」を選ぶ
-        #expect(manager.handleLiveConversionPanelKey(.left) == .handled)
+        // 最後の文節（入力中の対象）で、候補リストから「箸を」を選ぶ
+        #expect(manager.getLiveConversionPanelModel().columns.last?.isTarget == true)
         let list = manager.getLiveConversionPanelModel().candidateList?.items.map(\.text) ?? []
         #expect(list.contains("箸を"))
         for _ in 0..<LiveConversionPanelState.maxCandidateCount where manager.getLiveConversionClauses().last?.surface != "箸を" {
