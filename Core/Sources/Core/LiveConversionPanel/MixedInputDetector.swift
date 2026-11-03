@@ -87,6 +87,9 @@ public enum MixedInputDetector {
         let alignedPrefixes: [Bool]
         /// 語ごとの読みの範囲と、辞書の語か
         let elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)]
+        let elements: [DicdataElement]
+        /// 語の途中で英単語を始めない語の読みの範囲と、片仮名だけの語か。辞書の語に加え、学習した片仮名語（「コマンド」）も含む
+        let wordRanges: [(range: Range<Int>, isKatakana: Bool)]
 
         init(chars: [Character], reading: JapaneseReading, inputStyle: InputStyle, checker: any EnglishWordChecker) {
             self.chars = chars
@@ -104,12 +107,19 @@ public enum MixedInputDetector {
             let whole = text.convertTarget
             self.alignedPrefixes = prefixes.map { whole.hasPrefix($0) }
             var elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)] = []
+            var wordRanges: [(range: Range<Int>, isKatakana: Bool)] = []
             var position = 0
             for element in reading.elements {
-                elementRanges.append((position..<(position + element.ruby.count), Self.isDictionaryWord(element)))
+                let range = position..<(position + element.ruby.count)
+                elementRanges.append((range, Self.isDictionaryWord(element)))
+                if element.mid != MixedInputDetector.unknownWordMid {
+                    wordRanges.append((range, element.word.unicodeScalars.allSatisfy { (0x30A1...0x30FC).contains($0.value) }))
+                }
                 position += element.ruby.count
             }
             self.elementRanges = elementRanges
+            self.wordRanges = wordRanges
+            self.elements = reading.elements
         }
 
         /// 辞書の語として数えるか。辞書にない字の並べ方で埋めた要素と、学習から来たかなだけの語
@@ -158,12 +168,14 @@ public enum MixedInputDetector {
                 let word = self.chars[start..<end]
                 guard word.allSatisfy(\.isLowercase),
                       !ruleRanges.contains(where: { $0.overlaps(start..<end) }),
-                      // 最後の子音が後ろの母音と組んで自然な音節になる切り方（sake｜wo の kew）は外す
-                      !(end < self.chars.count && "aiueoy".contains(self.chars[end]) && !"aiueo".contains(self.chars[end - 1])),
+                      !self.joinsNextSyllable(end),
                       // ローマ字として読める英単語は、終わりも音節の切れ目に合っているものだけ
                       !MixedInputDetector.isCleanRomaji(word, inputStyle: self.inputStyle) || isClean(end),
+                      !self.isUnfinishedRomaji(word, end: end),
                       self.checker.isEnglishWord(String(word)),
-                      !self.isCoveredByDictionaryWord(start, end) else {
+                      !self.isCoveredByDictionaryWord(start, end),
+                      !self.cutsDictionaryWord(at: start),
+                      !self.isSpelledByDictionaryWords(start, end) else {
                     continue
                 }
                 // 後ろに母音が続くなら s は日本語の側に回す（commits＋ite → commit＋site）
@@ -174,6 +186,64 @@ public enum MixedInputDetector {
                 return end
             }
             return nil
+        }
+
+        /// 最後の子音が後ろと組んで自然な音節になる切り方か。sake｜wo の kew、nod｜hi の dhi（でぃ）
+        private func joinsNextSyllable(_ end: Int) -> Bool {
+            guard end < self.chars.count, !"aiueo".contains(self.chars[end - 1]) else {
+                return false
+            }
+            if "aiueoy".contains(self.chars[end]) {
+                return true
+            }
+            return self.chars[end] == "h" && "cdstw".contains(self.chars[end - 1])
+        }
+
+        /// 入力の末尾で、子音を打ちかけているだけの語か（「komanndoh」の doh は、次に a を打てば「どは」）。
+        /// まだ英語か決めない
+        private func isUnfinishedRomaji(_ word: ArraySlice<Character>, end: Int) -> Bool {
+            guard end == self.chars.count, !MixedInputDetector.isCleanRomaji(word, inputStyle: self.inputStyle) else {
+                return false
+            }
+            return "aiueo".contains { vowel in
+                MixedInputDetector.isCleanRomaji(word + [vowel], inputStyle: self.inputStyle)
+            }
+        }
+
+        /// 英単語の頭が、日本語として読んだときの語の途中に当たるか（「ディレクトリ＋で」の ride、「コマンド＋は」の doha、
+        /// 「コマ＋n」の man）。学習した片仮名語も語として数える（英単語を誤って確定した「コッミツィテ」でも、
+        /// commit は語の頭から始まるので止めない）。「を得」の「え」から始まる edit のように、漢字を含む語の 2 文字目に
+        /// 当たるだけなら切ってよい
+        private func cutsDictionaryWord(at start: Int) -> Bool {
+            let position = self.kanaLengths[start]
+            return self.wordRanges.contains { word in
+                word.range.lowerBound < position && position < word.range.upperBound
+                    && (word.isKatakana || word.range.lowerBound + 2 <= position)
+            }
+        }
+
+        /// 英単語の範囲が、辞書の語を並べた 1 つの文節としてぴったり読め、ひらがな 1 文字の付属語で終わるか
+        /// （「ように＋し＋て」の site、「来＋て」の kite）。文節が分かれる並び（rebase の「レバ｜背」）や、
+        /// 付属語で終わらない並び（issue の「いッ＋末」）は英語のまま。
+        /// 終わりが音節の切れ目に合っていないときは、読みの位置がずれるので調べない
+        private func isSpelledByDictionaryWords(_ start: Int, _ end: Int) -> Bool {
+            guard self.alignedPrefixes[end] else {
+                return false
+            }
+            let span = self.kanaLengths[start]..<self.kanaLengths[end]
+            let covering = self.elementRanges.indices.filter { self.elementRanges[$0].range.overlaps(span) }
+            guard let first = covering.first, let last = covering.last,
+                  self.elementRanges[first].range.lowerBound == span.lowerBound,
+                  self.elementRanges[last].range.upperBound == span.upperBound,
+                  covering.allSatisfy({ self.elementRanges[$0].isDictionaryWord }) else {
+                return false
+            }
+            let words = Array(self.elements[first...last])
+            guard words.count >= 2, let tail = words.last?.word, tail.count == 1,
+                  tail.unicodeScalars.allSatisfy({ (0x3041...0x3096).contains($0.value) }) else {
+                return false
+            }
+            return Candidate.makePrefixClauseCandidate(data: words).data.count == words.count
         }
 
         private func isCoveredByDictionaryWord(_ start: Int, _ end: Int) -> Bool {
