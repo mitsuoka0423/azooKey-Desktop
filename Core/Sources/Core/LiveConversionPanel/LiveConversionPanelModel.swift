@@ -15,14 +15,11 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
     }
 
     public struct CandidateItem: Sendable, Equatable {
-        /// 1 から始まる番号
-        public var number: Int
         public var text: String
         /// 意味の手がかり（なければ空）
         public var hint: String
 
-        public init(number: Int, text: String, hint: String) {
-            self.number = number
+        public init(text: String, hint: String) {
             self.text = text
             self.hint = hint
         }
@@ -93,8 +90,8 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
             return .init(columns: columns, targetIndex: target, candidateList: nil)
         }
         let visible = state.visibleCandidateCount(total: targetCandidates.count)
-        let items = targetCandidates.prefix(visible).enumerated().map { index, text in
-            CandidateItem(number: index + 1, text: text, hint: hint(text))
+        let items = targetCandidates.prefix(visible).map { text in
+            CandidateItem(text: text, hint: hint(text))
         }
         let list = CandidateList(
             items: items,
