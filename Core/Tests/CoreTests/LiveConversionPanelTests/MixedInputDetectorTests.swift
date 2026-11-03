@@ -187,12 +187,18 @@ private struct SpellCheckerWordChecker: EnglishWordChecker {
 @MainActor
 @Suite("MixedInput（スペルチェッカー）")
 struct MixedInputSpellCheckerTests {
-    @Test("スペルチェッカーは site や sit も英単語と認めるが、英単語の後ろの日本語は日本語のまま")
+    @Test("スペルチェッカーは site や nod も英単語と認めるが、日本語として打った部分は日本語のまま")
     func englishThenJapanese() {
         for (typed, expected) in [
             ("commitsite", "commitして"),
             ("asitanokaigidehabranchwokittekaracommitsitereviewwoonegaisimasu", "明日の会議ではbranchを切ってからcommitしてreviewをお願いします"),
-            ("watasihagakuseidesu", "私は学生です")
+            ("watasihagakuseidesu", "私は学生です"),
+            // 打ちかけの子音（doh、nod）、dhi の途中、辞書の語の途中（ディレクトリ＋で の ride）、し＋て の site を英語にしない
+            ("komanndohaninninodhirekutoridejikkoudekiruyounisite", "コマンドは任意のディレクトリで実行できるようにして"),
+            ("kodomonotamenisiteageru", "子供のためにしてあげる"),
+            ("nanisiteruno", "何してるの"),
+            ("sonofilewoeditsite", "そのfileをeditして"),
+            ("rebasesuru", "rebaseする")
         ] {
             let manager = SegmentsManager(
                 kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),
