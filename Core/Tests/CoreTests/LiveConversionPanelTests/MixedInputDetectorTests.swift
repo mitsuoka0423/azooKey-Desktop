@@ -238,7 +238,9 @@ struct MixedInputSpellCheckerTests {
             ("kodomonotamenisiteageru", "子供のためにしてあげる"),
             ("nanisiteruno", "何してるの"),
             ("sonofilewoeditsite", "そのfileをeditして"),
-            ("rebasesuru", "rebaseする")
+            ("rebasesuru", "rebaseする"),
+            // 促音の重ねた子音の間では英単語を終えない（not＋ち にしない）
+            ("notti", "のっち")
         ] {
             let manager = SegmentsManager(
                 kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),

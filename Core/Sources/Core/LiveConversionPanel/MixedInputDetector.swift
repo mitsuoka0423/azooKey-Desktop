@@ -188,12 +188,17 @@ public enum MixedInputDetector {
             return nil
         }
 
-        /// 最後の子音が後ろと組んで自然な音節になる切り方か。sake｜wo の kew、nod｜hi の dhi（でぃ）
+        /// 最後の子音が後ろと組んで自然な音節になる切り方か。sake｜wo の kew、nod｜hi の dhi（でぃ）、
+        /// 促音の重ねた子音の間で切る not｜ti（のっち）
         private func joinsNextSyllable(_ end: Int) -> Bool {
             guard end < self.chars.count, !"aiueo".contains(self.chars[end - 1]) else {
                 return false
             }
             if "aiueoy".contains(self.chars[end]) {
+                return true
+            }
+            // w は review｜wo のように英単語の末尾と「を」が重なるので除く
+            if self.chars[end] == self.chars[end - 1], "bcdfghjkmprstz".contains(self.chars[end]) {
                 return true
             }
             return self.chars[end] == "h" && "cdstw".contains(self.chars[end - 1])
