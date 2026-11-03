@@ -1168,7 +1168,17 @@ public final class SegmentsManager {
         } else {
             nil
         }
-        return LiveConversionClause.clauses(convertTarget: self.composingText.convertTarget, candidate: candidate)
+        let clauses = LiveConversionClause.clauses(convertTarget: self.composingText.convertTarget, candidate: candidate)
+        return LiveConversionClause.markingUnconvertedTail(clauses, count: self.unconvertedRomajiCount())
+    }
+
+    /// 末尾の打ちかけのローマ字の文字数。英字のままエンジンに渡した英単語（`.direct`）は数えない
+    private func unconvertedRomajiCount() -> Int {
+        let romaji = self.composingText.input.reversed().prefix { element in
+            element.inputStyle != .direct && Self.typedCharacter(element.piece).map { $0.isASCII && $0.isLetter } == true
+        }.count
+        let asciiTail = self.composingText.convertTarget.reversed().prefix { $0.isASCII && $0.isLetter }.count
+        return min(romaji, asciiTail)
     }
 
     /// エンジンの文節の列に、⇧← → で変えた区切りを当てたもの。表記の覆いかぶせはまだ当てない

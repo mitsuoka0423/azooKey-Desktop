@@ -157,6 +157,23 @@ struct MixedInputConversionTests {
         }
     }
 
+    @Test("⇧→ で、右隣の英単語の文節の先頭を取り込める。打ちかけのローマ字は取り込まない")
+    func extendIntoEnglishClause() {
+        let manager = Self.manager()
+        Self.type(manager, "asitahabranchwokiru")
+        #expect(manager.getLiveConversionClauses().first?.reading == "あしたは")
+        _ = manager.handleLiveConversionPanelKey(.right)
+        #expect(manager.handleLiveConversionPanelKey(.extend) == .handled)
+        #expect(manager.getLiveConversionClauses().map(\.reading).prefix(2) == ["あしたはb", "ranchをきる"])
+
+        let typing = Self.manager()
+        Self.type(typing, "kyouhat")
+        #expect(typing.getLiveConversionClauses().last == .init(reading: "t", surface: "t", isUnconverted: true))
+        _ = typing.handleLiveConversionPanelKey(.right)
+        _ = typing.handleLiveConversionPanelKey(.extend)
+        #expect(typing.getLiveConversionClauses().map(\.reading) == ["きょうは", "t"])
+    }
+
     @Test("日本語として読んで辞書の語に収まるなら日本語のまま（来て・酒・トマト・天気）")
     func dictionaryCovered() {
         for (typed, expected) in [

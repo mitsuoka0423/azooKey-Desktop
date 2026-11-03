@@ -151,6 +151,21 @@ struct LiveConversionPanelStateTests {
         #expect(clauses.map(\.reading) == ["あしたは", "はしの", "はしを", "わた", "る"])
     }
 
+    @Test("⇧→ で英単語の文節の先頭も取り込む。打ちかけのローマ字は取り込まない")
+    func extendIntoEnglishButNotUnconverted() {
+        let english: [LiveConversionClause] = [.init(reading: "あしたは", surface: "明日は"), .init(reading: "branchを", surface: "branchを")]
+        var state = LiveConversionPanelState()
+        _ = state.handle(.right, clauses: english, candidates: { _ in [] })
+        _ = state.handle(.extend, clauses: english, candidates: { _ in [] })
+        #expect(state.applying(to: state.segmented(english, convert: { $0 })).map(\.reading) == ["あしたはb", "ranchを"])
+
+        let typing: [LiveConversionClause] = [.init(reading: "きょうは", surface: "今日は"), .init(reading: "t", surface: "t", isUnconverted: true)]
+        var pending = LiveConversionPanelState()
+        _ = pending.handle(.right, clauses: typing, candidates: { _ in [] })
+        _ = pending.handle(.extend, clauses: typing, candidates: { _ in [] })
+        #expect(pending.overrides.isEmpty)
+    }
+
     @Test("入力中に ⇧← を押すと、対象の文節を選んでから区切る")
     func resizeWhileTyping() {
         let state = Self.resize([.shrink])

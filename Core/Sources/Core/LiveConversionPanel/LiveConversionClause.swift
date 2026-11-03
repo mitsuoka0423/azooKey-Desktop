@@ -7,10 +7,13 @@ public struct LiveConversionClause: Sendable, Equatable {
     public var reading: String
     /// 変換結果
     public var surface: String
+    /// まだかなになっていない打ちかけのローマ字。⇧→ で前の文節に取り込まない
+    public var isUnconverted: Bool
 
-    public init(reading: String, surface: String) {
+    public init(reading: String, surface: String, isUnconverted: Bool = false) {
         self.reading = reading
         self.surface = surface
+        self.isUnconverted = isUnconverted
     }
 }
 
@@ -61,8 +64,28 @@ public extension LiveConversionClause {
         let coveredCount = result.reduce(0) { $0 + $1.reading.count }
         if coveredCount < convertTarget.count {
             let tail = String(convertTarget.dropFirst(coveredCount))
-            result.append(.init(reading: tail, surface: tail))
+            result.append(.init(reading: tail, surface: tail, isUnconverted: true))
         }
+        return result
+    }
+
+    /// 末尾の `count` 文字（打ちかけのローマ字）を、変換しない文節として分ける。
+    /// エンジンは打ちかけのローマ字も語として返すので、英単語の英字と見分けるために入力の方式から数えた文字数を使う
+    static func markingUnconvertedTail(_ clauses: [LiveConversionClause], count: Int) -> [LiveConversionClause] {
+        guard count > 0, var last = clauses.last, !last.isUnconverted else {
+            return clauses
+        }
+        let tail = String(last.reading.suffix(count))
+        guard tail.count == count, last.surface.hasSuffix(tail) else {
+            return clauses
+        }
+        var result = Array(clauses.dropLast())
+        if last.reading.count > count {
+            last.reading.removeLast(count)
+            last.surface.removeLast(count)
+            result.append(last)
+        }
+        result.append(.init(reading: tail, surface: tail, isUnconverted: true))
         return result
     }
 

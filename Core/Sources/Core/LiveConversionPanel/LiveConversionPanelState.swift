@@ -284,8 +284,8 @@ public struct LiveConversionPanelState: Sendable, Equatable {
         var reading = Array(clauses[target].reading)
         var next = target + 1 < clauses.count ? Array(clauses[target + 1].reading) : []
         if delta > 0 {
-            // 未変換のローマ字は取り込まない
-            guard let first = next.first, !first.isASCII else {
+            // 未変換のローマ字は取り込まない。英単語の文節（英字のままエンジンに渡したもの）は取り込む
+            guard !next.isEmpty, !clauses[target + 1].isUnconverted else {
                 return
             }
             reading.append(next.removeFirst())
