@@ -88,6 +88,8 @@ public enum MixedInputDetector {
         /// 語ごとの読みの範囲と、辞書の語か
         let elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)]
         let elements: [DicdataElement]
+        /// 語の途中で英単語を始めない語の読みの範囲と、片仮名だけの語か。辞書の語に加え、学習した片仮名語（「コマンド」）も含む
+        let wordRanges: [(range: Range<Int>, isKatakana: Bool)]
 
         init(chars: [Character], reading: JapaneseReading, inputStyle: InputStyle, checker: any EnglishWordChecker) {
             self.chars = chars
@@ -105,12 +107,18 @@ public enum MixedInputDetector {
             let whole = text.convertTarget
             self.alignedPrefixes = prefixes.map { whole.hasPrefix($0) }
             var elementRanges: [(range: Range<Int>, isDictionaryWord: Bool)] = []
+            var wordRanges: [(range: Range<Int>, isKatakana: Bool)] = []
             var position = 0
             for element in reading.elements {
-                elementRanges.append((position..<(position + element.ruby.count), Self.isDictionaryWord(element)))
+                let range = position..<(position + element.ruby.count)
+                elementRanges.append((range, Self.isDictionaryWord(element)))
+                if element.mid != MixedInputDetector.unknownWordMid {
+                    wordRanges.append((range, element.word.unicodeScalars.allSatisfy { (0x30A1...0x30FC).contains($0.value) }))
+                }
                 position += element.ruby.count
             }
             self.elementRanges = elementRanges
+            self.wordRanges = wordRanges
             self.elements = reading.elements
         }
 
@@ -202,12 +210,16 @@ public enum MixedInputDetector {
             }
         }
 
-        /// 英単語の頭が、日本語として読んだときの辞書の語の奥（2 文字目より後ろ）に当たるか
-        /// （「ディレクトリ＋で」の ride、「コマンド＋は」の doha）。「を得」の「え」から始まる edit のように、
-        /// 語の 2 文字目に当たるだけなら切ってよい
+        /// 英単語の頭が、日本語として読んだときの語の途中に当たるか（「ディレクトリ＋で」の ride、「コマンド＋は」の doha、
+        /// 「コマ＋n」の man）。学習した片仮名語も語として数える（英単語を誤って確定した「コッミツィテ」でも、
+        /// commit は語の頭から始まるので止めない）。「を得」の「え」から始まる edit のように、漢字を含む語の 2 文字目に
+        /// 当たるだけなら切ってよい
         private func cutsDictionaryWord(at start: Int) -> Bool {
             let position = self.kanaLengths[start]
-            return self.elementRanges.contains { $0.isDictionaryWord && $0.range.lowerBound + 2 <= position && position < $0.range.upperBound }
+            return self.wordRanges.contains { word in
+                word.range.lowerBound < position && position < word.range.upperBound
+                    && (word.isKatakana || word.range.lowerBound + 2 <= position)
+            }
         }
 
         /// 英単語の範囲が、辞書の語を並べた 1 つの文節としてぴったり読め、ひらがな 1 文字の付属語で終わるか

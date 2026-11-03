@@ -11,8 +11,14 @@ struct WordListChecker: EnglishWordChecker {
         "kite", "sake", "tomato", "main", "name", "it", "sit", "ten", "kid", "send", "sink", "pr"
     ]
 
+    var extra: Set<String> = []
+
+    static func adding(_ words: Set<String>) -> WordListChecker {
+        WordListChecker(extra: words)
+    }
+
     func isEnglishWord(_ word: String) -> Bool {
-        Self.words.contains(word)
+        Self.words.contains(word) || self.extra.contains(word)
     }
 }
 
@@ -62,6 +68,23 @@ struct MixedInputDetectorTests {
         }
         #expect(english(.isLearned) == ["commit"])
         #expect(english(.empty).isEmpty)
+    }
+
+    @Test("学習した片仮名語の途中からは英単語を始めない（コマンド＋は の doha、ディレクトリ の tori）")
+    func learnedKatakanaWordIsNotCut() {
+        func english(_ typed: String, _ words: [(String, String)]) -> [String] {
+            let chars = Array(typed)
+            let elements = words.map { DicdataElement(word: $0.0, ruby: $0.1, cid: CIDData.一般名詞.cid, mid: 283, value: -10, metadata: .isLearned) }
+            return MixedInputDetector.englishRanges(
+                in: chars,
+                inputStyle: .roman2kana,
+                japaneseReading: .init(elements: elements),
+                checker: WordListChecker.adding(["doha", "tori", "man"])
+            ).map { String(chars[$0]) }
+        }
+        #expect(english("komanndoha", [("コマンド", "コマンド"), ("は", "ハ")]).isEmpty)
+        #expect(english("dhirekutori", [("ディレクトリ", "ディレクトリ")]).isEmpty)
+        #expect(english("koman", [("コマ", "コマ"), ("n", "n")]).isEmpty)
     }
 
     @Test("ローマ字としても読める英単語は日本語のまま（候補から選ぶ）")
