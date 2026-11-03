@@ -19,6 +19,7 @@ struct LiveConversionHintProviderTests {
         #expect(self.provider.displayHint(for: "はしを", reading: "はしを") == "ひらがな")
         #expect(self.provider.displayHint(for: "ハシヲ", reading: "はしを") == "カタカナ")
         #expect(self.provider.displayHint(for: "ハシを", reading: "はしを") == "カタカナ")
+        #expect(self.provider.displayHint(for: "notti", reading: "のっち") == "英字")
     }
 
     @Test("説明がない候補は空欄")

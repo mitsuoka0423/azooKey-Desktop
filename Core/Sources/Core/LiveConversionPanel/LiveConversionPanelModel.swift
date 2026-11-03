@@ -105,11 +105,17 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
         return .init(columns: columns, targetIndex: target, candidateList: list)
     }
 
-    /// 文節の候補を並べる。エンジンの表記を先頭に、辞書変換の候補、ひらがな、カタカナの順。重なりを除き、最大 9 件
-    public static func candidates(engineSurface: String, reading: String, dictionaryCandidates: [String]) -> [String] {
+    /// 文節の候補を並べる。エンジンの表記を先頭に、辞書変換の候補、ひらがな、カタカナ、打ったとおりの英字の順。重なりを除き、最大 9 件。
+    /// 9 件を超えるときは辞書の候補を後ろから減らし、ひらがな・カタカナ・英字は残す
+    public static func candidates(engineSurface: String, reading: String, dictionaryCandidates: [String], typed: String? = nil) -> [String] {
+        let fixed = [reading, Self.katakana(reading), typed ?? ""]
         var seen = Set<String>()
-        let all = [engineSurface] + dictionaryCandidates + [reading, Self.katakana(reading)]
-        return Array(all.filter { !$0.isEmpty && seen.insert($0).inserted }.prefix(LiveConversionPanelState.maxCandidateCount))
+        var all = ([engineSurface] + dictionaryCandidates + fixed).filter { !$0.isEmpty && seen.insert($0).inserted }
+        while all.count > LiveConversionPanelState.maxCandidateCount,
+              let last = all.indices.dropFirst().last(where: { !fixed.contains(all[$0]) }) {
+            all.remove(at: last)
+        }
+        return all
     }
 
     static func katakana(_ text: String) -> String {
