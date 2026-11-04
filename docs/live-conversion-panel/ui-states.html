@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>変換パネルの状態と UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; each state is a "specimen" row with the mock panel on the left and its notes on the right */
+:root {
+  --bg: #f5f6f8;
+  --paper: #ffffff;
+  --ink: #1b2130;
+  --muted: #5c6678;
+  --rule: #d8dce4;
+  --tag: #2b5fb8;
+  --tag-soft: #e7eefb;
+  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* macOS の色に寄せたモックアップ用の色 */
+  --mac-desk: #e9ebef;
+  --mac-text: #1d1d1f;
+  --mac-label2: rgba(60, 60, 67, .62);
+  --mac-label3: rgba(60, 60, 67, .38);
+  --mac-sep: rgba(60, 60, 67, .22);
+  --mac-popover: rgba(246, 246, 248, .92);
+  --mac-control: rgba(255, 255, 255, .85);
+  --mac-accent: #007aff;
+  --mac-accent-15: rgba(0, 122, 255, .15);
+  --mac-orange: #ff9500;
+  --mac-on-accent: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181e; --paper: #1d2129; --ink: #e5e8ee; --muted: #9aa3b3; --rule: #343a47;
+    --tag: #8db4f7; --tag-soft: #1f2b41;
+    --mac-desk: #24272d; --mac-text: #f5f5f7; --mac-label2: rgba(235, 235, 245, .6); --mac-label3: rgba(235, 235, 245, .32);
+    --mac-sep: rgba(235, 235, 245, .2); --mac-popover: rgba(40, 40, 44, .92); --mac-control: rgba(30, 30, 32, .85);
+    --mac-accent: #0a84ff; --mac-accent-15: rgba(10, 132, 255, .2); --mac-orange: #ff9f0a; --mac-on-accent: #ffffff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181e; --paper: #1d2129; --ink: #e5e8ee; --muted: #9aa3b3; --rule: #343a47;
+  --tag: #8db4f7; --tag-soft: #1f2b41;
+  --mac-desk: #24272d; --mac-text: #f5f5f7; --mac-label2: rgba(235, 235, 245, .6); --mac-label3: rgba(235, 235, 245, .32);
+  --mac-sep: rgba(235, 235, 245, .2); --mac-popover: rgba(40, 40, 44, .92); --mac-control: rgba(30, 30, 32, .85);
+  --mac-accent: #0a84ff; --mac-accent-15: rgba(10, 132, 255, .2); --mac-orange: #ff9f0a; --mac-on-accent: #ffffff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.7; }
+.wrap {
+  max-width: 1040px; margin: 0 auto; display: grid; gap: 44px;
+  padding-block: 36px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1 { font-size: 1.8rem; line-height: 1.3; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.25rem; margin: 0; text-wrap: balance; }
+h3 { font-size: 1.02rem; margin: 0; }
+p { margin: 0; max-width: 68ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+.lead { color: var(--muted); }
+code { font-family: var(--font-mono); font-size: .86em; }
+kbd {
+  font-family: var(--font-mono); font-size: .82em; padding: 0 5px; border: 1px solid var(--rule);
+  border-bottom-width: 2px; border-radius: 4px; background: var(--paper); white-space: nowrap;
+}
+.name { font-weight: 700; }
+.id { font-family: var(--font-mono); font-size: .8em; color: var(--tag); background: var(--tag-soft); padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+.note { color: var(--muted); font-size: .9em; }
+.box { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; }
+.scroll { overflow-x: auto; }
+ul { margin: 0; padding-left: 1.2em; max-width: 68ch; }
+li + li { margin-top: 2px; }
+
+/* ---------- 部品の地図 ---------- */
+.tree { padding: 18px 20px; display: grid; gap: 4px; font-size: .95em; }
+.tree div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.tree .d1 { padding-left: 1.4em; }
+.tree .d2 { padding-left: 2.8em; }
+.tree .d3 { padding-left: 4.2em; }
+.tree .desc { color: var(--muted); font-size: .9em; }
+
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: .9em; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+thead th { font-size: .8em; letter-spacing: .04em; color: var(--muted); font-weight: 500; background: var(--bg); }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---------- 状態遷移図 ---------- */
+figure { margin: 0; display: grid; gap: 8px; }
+figcaption { color: var(--muted); font-size: .9em; max-width: 68ch; }
+svg.flow { display: block; width: 100%; min-width: 860px; height: auto; color: var(--ink); }
+svg.flow text { font-family: var(--font-body); fill: currentColor; }
+svg.flow .mono { font-family: var(--font-mono); }
+svg.flow .soft { fill: var(--muted); }
+
+/* ---------- 状態ごとの見本 ---------- */
+.specimen { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0; overflow: hidden; }
+.specimen > * { min-width: 0; }
+.stage { background: var(--mac-desk); padding: 22px 22px 26px; display: grid; gap: 10px; align-content: start; border-right: 1px solid var(--rule); overflow-x: auto; }
+.notes { padding: 20px 22px; display: grid; gap: 10px; align-content: start; }
+.state-head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.state-key { font-family: var(--font-mono); font-size: .78em; color: var(--muted); }
+@media (max-width: 760px) {
+  .specimen { grid-template-columns: 1fr; }
+  .stage { border-right: 0; border-bottom: 1px solid var(--rule); }
+}
+
+/* 本文（アプリの中の未確定文字列） */
+.doc { font-family: -apple-system, "Hiragino Sans", var(--font-body); font-size: 15px; color: var(--mac-text); line-height: 1.6; }
+.doc .u { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.doc .u + .u { margin-left: 3px; }
+.doc .f { text-decoration-thickness: 2.5px; }
+.doc .caret { display: inline-block; width: 1.5px; height: 1.05em; background: var(--mac-text); vertical-align: -2px; margin-left: 1px; }
+
+/* 変換パネル（モックアップ） */
+.mac { font-family: -apple-system, "Hiragino Sans", var(--font-body); color: var(--mac-text); }
+.panel {
+  display: inline-grid; gap: 2px; padding: 6px 8px 5px 6px; border-radius: 8px; border: 1px solid var(--mac-sep);
+  background: var(--mac-popover); box-shadow: 0 8px 24px rgba(0, 0, 0, .18), 0 1px 3px rgba(0, 0, 0, .12);
+  justify-self: start; min-width: 0;
+}
+.lane { display: flex; align-items: flex-start; }
+.card { position: relative; padding: 3px 6px 4px; border-radius: 5px; display: grid; gap: 1px; }
+.card .r { font-size: 14px; line-height: 1.25; }
+.card .s { font-size: 11px; line-height: 1.25; color: var(--mac-label2); }
+.card.t { background: var(--mac-accent-15); }
+.card.t .r { font-weight: 700; color: var(--mac-accent); }
+.card.low .r { color: var(--mac-orange); }
+.card.low::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 0; height: 2px; background: var(--mac-orange); }
+.div { width: 1px; height: 32px; background: var(--mac-sep); }
+.div.h { background: transparent; }
+.bubble-wrap { display: flex; }
+.bubble {
+  position: relative; margin-top: 6px; padding: 3px; min-width: 140px; border-radius: 6px;
+  border: 1px solid var(--mac-sep); background: var(--mac-control); display: grid;
+}
+.bubble::before, .bubble::after { content: ""; position: absolute; left: var(--px, 22px); border: 7px solid transparent; border-top: 0; }
+.bubble::before { top: -7px; border-bottom: 7px solid var(--mac-sep); margin-left: -7px; }
+.bubble::after { top: -5.5px; border-bottom: 6px solid var(--mac-control); margin-left: -6px; border-width: 0 6px 6px; }
+.row { display: flex; gap: 8px; align-items: baseline; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.row .c { font-size: 13px; }
+.row .h { font-size: 11px; color: var(--mac-label2); margin-left: auto; padding-left: 12px; }
+.row.sel { background: var(--mac-accent); }
+.row.sel .c, .row.sel .h { color: var(--mac-on-accent); }
+.more { display: flex; gap: 6px; align-items: baseline; padding: 3px 6px 2px; white-space: nowrap; }
+.more .k { font-size: 10px; font-weight: 600; color: var(--mac-label2); }
+.more .l { font-size: 11px; color: var(--mac-label2); }
+.hint { font-size: 10px; color: var(--mac-label3); justify-self: end; white-space: nowrap; }
+
+/* 名前の札 */
+.pins { display: flex; flex-wrap: wrap; gap: 6px; }
+.pin { font-family: var(--font-mono); font-size: .74em; color: var(--tag); background: var(--tag-soft); padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
+
+/* 位置の図 */
+.place { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+.place svg { width: 100%; height: auto; color: var(--ink); }
+.place svg text { font-family: var(--font-body); fill: currentColor; }
+
+/* アニメーション */
+@keyframes drop-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.demo { display: grid; gap: 12px; padding: 18px 20px; }
+.demo-stage { background: var(--mac-desk); border-radius: 8px; padding: 18px; min-height: 150px; display: grid; gap: 8px; align-content: start; }
+.demo-stage .panel.play { animation: drop-in .12s ease-in-out both; }
+.demo-stage .panel.slow { animation-duration: 1.2s; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: inherit; font-size: .9em; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--rule);
+  background: var(--paper); color: var(--ink); cursor: pointer;
+}
+button:hover { border-color: var(--tag); }
+button:focus-visible { outline: 2px solid var(--tag); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .demo-stage .panel.play { animation: none; }
+}
+.callout { border-left: 3px solid var(--tag); background: var(--tag-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; display: grid; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header style="display:grid;gap:10px">
+  <h1>変換パネルの状態と UI</h1>
+  <p class="lead">見た目のデザインを話すための資料です。変換パネルのどの部品がどの状態でどう見えるか、状態が変わるときに何が動くかをまとめました。部品とアニメーションには名前をつけてあるので、「<span class="name">文節カード</span>の<span class="name">注意バー</span>を太くしたい」のように名前で指せます。</p>
+  <p class="note">元にしたのは main のコード（PR #15 の候補のページ送りまで）です（<code>LiveConversionPanelView.swift</code>、<code>LiveConversionCandidateListView.swift</code>、<code>LiveConversionPanelModel.swift</code>）。見本の文字と候補は例です。</p>
+</header>
+
+<!-- ======================= 部品の地図 ======================= -->
+<section id="components">
+  <h2>部品の地図</h2>
+  <p>入れ子の順に並べています。右の英字の名前は、コードや会話で使う短い呼び名です。</p>
+  <div class="box tree">
+    <div><span class="name">本文の未確定文字列</span><span class="id">InlineText</span><span class="desc">アプリの中に出る変換中の文字。パネルの外</span></div>
+    <div class="d1"><span class="name">文節の下線</span><span class="id">InlineText.ClauseUnderline</span><span class="desc">文節ごとに分かれた細い下線</span></div>
+    <div class="d1"><span class="name">対象の下線</span><span class="id">InlineText.FocusUnderline</span><span class="desc">対象の文節だけ太い下線</span></div>
+    <div><span class="name">変換パネル</span><span class="id">Panel</span><span class="desc">本文の下（入らなければ上）に浮かぶ窓。影つき</span></div>
+    <div class="d1"><span class="name">パネル地</span><span class="id">Panel.Surface</span><span class="desc">すりガラスの背景、角丸 8、細い枠線</span></div>
+    <div class="d1"><span class="name">文節レーン</span><span class="id">ClauseLane</span><span class="desc">文節カードを横に並べる行</span></div>
+    <div class="d2"><span class="name">文節カード</span><span class="id">ClauseCard</span><span class="desc">1 つの文節。読みと表記の 2 段</span></div>
+    <div class="d3"><span class="name">読み</span><span class="id">ClauseCard.Reading</span><span class="desc">上の段。ひらがな 14pt</span></div>
+    <div class="d3"><span class="name">表記</span><span class="id">ClauseCard.Surface</span><span class="desc">下の段。変換結果 11pt、薄い色</span></div>
+    <div class="d3"><span class="name">注意バー</span><span class="id">ClauseCard.WarningBar</span><span class="desc">自信の低い文節の下端に引くオレンジの線</span></div>
+    <div class="d2"><span class="name">文節の仕切り</span><span class="id">ClauseDivider</span><span class="desc">文節カードの間の縦線。対象の両隣では消す</span></div>
+    <div class="d1"><span class="name">候補の吹き出し</span><span class="id">CandidateBubble</span><span class="desc">対象の文節カードの真下に下がる候補リスト</span></div>
+    <div class="d2"><span class="name">吹き出しの角</span><span class="id">CandidateBubble.Pointer</span><span class="desc">上辺の三角。対象の文節カードの中央を指す</span></div>
+    <div class="d2"><span class="name">候補行</span><span class="id">CandidateRow</span><span class="desc">候補 1 件。選んでいる行は塗りつぶし</span></div>
+    <div class="d3"><span class="name">候補</span><span class="id">CandidateRow.Text</span><span class="desc">候補の文字 13pt</span></div>
+    <div class="d3"><span class="name">手がかり</span><span class="id">CandidateRow.Hint</span><span class="desc">意味の手がかり 11pt、右寄せ</span></div>
+    <div class="d2"><span class="name">開閉行</span><span class="id">ExpandRow</span><span class="desc">吹き出しの最後の行。「Tab ほかの候補 N 件」「候補をたたむ」</span></div>
+    <div class="d1"><span class="name">キーヒント</span><span class="id">KeyHint</span><span class="desc">一番下の右寄せ 1 行。「Tab 広げる　Esc 読みに戻す　⇧← → 区切り」</span></div>
+  </div>
+
+  <div class="box scroll">
+    <table>
+      <thead><tr><th>部品</th><th>見た目の決まり（今のコード）</th><th>変わる条件</th></tr></thead>
+      <tbody>
+        <tr><td><span class="name">パネル地</span> <span class="id">Panel.Surface</span></td><td>すりガラス（popover）、角丸 8、枠線 1px 区切り線の色、影あり。内側の余白 上 6・左 6・下 5・右 8</td><td>ライト・ダークで色が変わる</td></tr>
+        <tr><td><span class="name">文節カード</span> <span class="id">ClauseCard</span></td><td>余白 上 3・左右 6・下 4、角丸 5。読みと表記の間 1</td><td>対象：アクセント色 15% の塗り、読みを太字・アクセント色<br>自信が低い：読みをオレンジ、注意バーを出す（対象でもオレンジが勝つ）</td></tr>
+        <tr><td><span class="name">注意バー</span> <span class="id">ClauseCard.WarningBar</span></td><td>高さ 2、左右 4 内側、オレンジ、カードの下端</td><td>自信の低い文節だけ。候補を選ぶと消える</td></tr>
+        <tr><td><span class="name">文節の仕切り</span> <span class="id">ClauseDivider</span></td><td>幅 1 × 高さ 32、区切り線の色</td><td>対象の文節カードの両隣では透明</td></tr>
+        <tr><td><span class="name">候補の吹き出し</span> <span class="id">CandidateBubble</span></td><td>角丸 6、枠線 1px、背景 85% 不透明、最小幅 140。左端を対象の文節カードの左端にそろえる</td><td>対象の文節が変わると位置が飛ぶ。候補が 5 件以上なら開閉行が出る</td></tr>
+        <tr><td><span class="name">吹き出しの角</span> <span class="id">CandidateBubble.Pointer</span></td><td>高さ 6、幅 14 の三角。枠線は三角のところだけ途切れる</td><td>対象の文節カードの中央を指す</td></tr>
+        <tr><td><span class="name">候補行</span> <span class="id">CandidateRow</span></td><td>余白 上下 2・左右 6、角丸 4。候補と手がかりの間 8</td><td>選んでいる行：アクセント色の塗り、文字は白</td></tr>
+        <tr><td><span class="name">開閉行</span> <span class="id">ExpandRow</span></td><td>「Tab」10pt 中太 ＋ 文言 11pt、どちらも薄い色</td><td>たたむ：「ほかの候補 N 件」／広げる：「候補をたたむ」。9 件を超えるときは「候補をたたむ　10–18 / 63 件」のように今のページの位置も出す</td></tr>
+        <tr><td><span class="name">キーヒント</span> <span class="id">KeyHint</span></td><td>10pt、さらに薄い色、右寄せ</td><td>いつも同じ文言</td></tr>
+        <tr><td><span class="name">本文の未確定文字列</span> <span class="id">InlineText</span></td><td>文節ごとに下線を分け、対象の文節は太い下線（下線の描き方はアプリ任せ）</td><td>文節が 1 つのときは分けず、太い下線もない</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ======================= 状態遷移図 ======================= -->
+<section id="states">
+  <h2>状態遷移図</h2>
+  <p>状態は 4 つ（パネルなし、入力中、文節選択中、それぞれのたたむ／広げる）です。矢印の上はきっかけのキー、下の <span class="id">名前</span> はそのときの見た目の変化（遷移）の名前です。アニメーションがあるのは <span class="name">登場</span> だけで、ほかは一瞬で描き替えます。</p>
+  <div class="box scroll" style="padding:12px">
+    <figure>
+      <svg class="flow" viewBox="0 0 980 600" role="img" aria-label="変換パネルの状態遷移図。パネルなしから文字を打つと登場のアニメーションで入力中になり、Enter で退場する。入力中と文節選択中は矢印キーと文字入力で行き来し、どちらも Tab でたたむと広げるを切り替える。">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+
+        <!-- パネルなし -->
+        <rect x="390" y="24" width="200" height="66" rx="10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="5 4"></rect>
+        <text x="490" y="52" text-anchor="middle" font-weight="700" font-size="15">パネルなし</text>
+        <text x="490" y="74" text-anchor="middle" font-size="12" class="soft mono">S0 Idle</text>
+
+        <!-- 入力中 -->
+        <rect x="40" y="190" width="380" height="250" rx="14" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <text x="60" y="220" font-weight="700" font-size="15">入力中</text>
+        <text x="60" y="240" font-size="12" class="soft">対象の文節は自動（自信の低い文節、なければ最後）</text>
+        <rect x="64" y="262" width="150" height="70" rx="8" fill="none" stroke="currentColor"></rect>
+        <text x="139" y="292" text-anchor="middle" font-size="13" font-weight="500">たたむ</text>
+        <text x="139" y="314" text-anchor="middle" font-size="11" class="soft mono">S1 Typing</text>
+        <rect x="246" y="262" width="150" height="70" rx="8" fill="none" stroke="currentColor"></rect>
+        <text x="321" y="292" text-anchor="middle" font-size="13" font-weight="500">広げる</text>
+        <text x="321" y="314" text-anchor="middle" font-size="11" class="soft mono">S2 TypingExpanded</text>
+        <path d="M214,285 L244,285" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"></path>
+        <path d="M246,310 L216,310" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"></path>
+        <text x="230" y="352" text-anchor="middle" font-size="11.5"><tspan class="mono">Tab</tspan>・4 件目から <tspan class="mono">↓</tspan></text>
+        <text x="230" y="368" text-anchor="middle" font-size="11" fill="var(--tag)" class="mono">展開 / 収納</text>
+        <text x="60" y="398" font-size="11.5">中で：<tspan class="mono">Space ↓ ↑</tspan> 候補送り・<tspan class="mono">Esc</tspan> 読みに戻す</text>
+        <text x="60" y="416" font-size="11.5">文字・削除で対象を選び直す（広げていればたたむ）</text>
+
+        <!-- 文節選択中 -->
+        <rect x="560" y="190" width="380" height="250" rx="14" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <text x="580" y="220" font-weight="700" font-size="15">文節選択中</text>
+        <text x="580" y="240" font-size="12" class="soft">対象の文節は ← → で選んだもの</text>
+        <rect x="584" y="262" width="150" height="70" rx="8" fill="none" stroke="currentColor"></rect>
+        <text x="659" y="292" text-anchor="middle" font-size="13" font-weight="500">たたむ</text>
+        <text x="659" y="314" text-anchor="middle" font-size="11" class="soft mono">S3 Selecting</text>
+        <rect x="766" y="262" width="150" height="70" rx="8" fill="none" stroke="currentColor"></rect>
+        <text x="841" y="292" text-anchor="middle" font-size="13" font-weight="500">広げる</text>
+        <text x="841" y="314" text-anchor="middle" font-size="11" class="soft mono">S4 SelectingExpanded</text>
+        <path d="M734,285 L764,285" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"></path>
+        <path d="M766,310 L736,310" stroke="currentColor" stroke-width="1.3" marker-end="url(#ah)"></path>
+        <text x="750" y="352" text-anchor="middle" font-size="11.5"><tspan class="mono">Tab</tspan>・4 件目から <tspan class="mono">↓</tspan></text>
+        <text x="750" y="368" text-anchor="middle" font-size="11" fill="var(--tag)" class="mono">展開 / 収納</text>
+        <text x="580" y="398" font-size="11.5">中で：<tspan class="mono">← →</tspan> 対象移動・<tspan class="mono">⇧← ⇧→</tspan> 区切り変更</text>
+        <text x="580" y="416" font-size="11.5"><tspan class="mono">Space ↓ ↑</tspan> 候補送り・<tspan class="mono">Esc</tspan> 読みに戻す</text>
+
+        <!-- S0 -> S1 -->
+        <path d="M410,90 C330,120 240,150 200,188" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"></path>
+        <text x="250" y="128" font-size="12.5">文字を打つ</text>
+        <text x="250" y="146" font-size="11.5" fill="var(--tag)" class="mono">登場（ドロップイン 0.12 秒）</text>
+        <!-- S1/S2 -> S0 -->
+        <path d="M120,188 C130,110 260,64 388,56" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"></path>
+        <text x="70" y="96" font-size="12.5"><tspan class="mono">Enter</tspan> 確定・全部消す</text>
+        <text x="70" y="114" font-size="11.5" fill="var(--tag)" class="mono">退場（アニメなし）</text>
+        <!-- S3/S4 -> S0 -->
+        <path d="M860,188 C850,110 720,64 592,56" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"></path>
+        <text x="760" y="96" font-size="12.5"><tspan class="mono">Enter</tspan> 確定</text>
+        <text x="760" y="114" font-size="11.5" fill="var(--tag)" class="mono">退場（アニメなし）</text>
+
+        <!-- S1 -> S3 -->
+        <path d="M422,262 L556,262" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"></path>
+        <text x="489" y="252" text-anchor="middle" font-size="12.5"><tspan class="mono">← → ⇧← ⇧→</tspan></text>
+        <text x="489" y="282" text-anchor="middle" font-size="11.5" fill="var(--tag)" class="mono">対象移動</text>
+        <!-- S3 -> S1 -->
+        <path d="M556,330 L422,330" stroke="currentColor" stroke-width="1.5" marker-end="url(#ah)"></path>
+        <text x="489" y="320" text-anchor="middle" font-size="12.5">文字を打つ・消す</text>
+        <text x="489" y="350" text-anchor="middle" font-size="11.5" fill="var(--tag)" class="mono">対象の自動選び直し</text>
+
+        <!-- 位置 -->
+        <rect x="40" y="480" width="900" height="96" rx="10" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 4"></rect>
+        <text x="60" y="508" font-weight="700" font-size="13.5">どの状態にも重なる「位置」</text>
+        <text x="60" y="532" font-size="12">本文の下に出る（既定）。下に入らなければ上に出し、同じ変換の中では下に戻さない。上にも入らなければ画面の中に押し込む。</text>
+        <text x="60" y="556" font-size="11.5" fill="var(--tag)" class="mono">位置反転（アニメなし）</text>
+      </svg>
+      <figcaption>図 1. 状態と遷移。入力中と文節選択中は、見た目では区別がつきません（対象の文節の決まり方だけが違います）。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ======================= 状態ごとの見本 ======================= -->
+<section id="specimens">
+  <h2>状態ごとの UI</h2>
+  <p>例文は「橋の端を渡る」（<code>hasinohasiwowataru</code>）です。「はしを」は自信が低い文節という設定にしています。</p>
+
+  <!-- S0 -->
+  <div class="box specimen">
+    <div class="stage">
+      <div class="doc">昨日は</div>
+      <div class="doc"><span class="caret"></span></div>
+    </div>
+    <div class="notes">
+      <div class="state-head"><h3>パネルなし</h3><span class="state-key">S0 Idle</span></div>
+      <p>未確定の文字がないとき。設定で変換パネルがオフのとき、ライブ変換がオフのとき、英語入力のときも、パネルは出ません。</p>
+      <div class="pins"><span class="pin">（出る部品なし）</span></div>
+    </div>
+  </div>
+
+  <!-- S1 -->
+  <div class="box specimen">
+    <div class="stage mac">
+      <div class="doc"><span class="u">橋の</span><span class="u f">橋を</span><span class="u">渡る</span><span class="caret"></span></div>
+      <div class="panel">
+        <div class="lane">
+          <div class="card"><span class="r">はしの</span><span class="s">橋の</span></div>
+          <div class="div h"></div>
+          <div class="card t low"><span class="r">はしを</span><span class="s">橋を</span></div>
+          <div class="div h"></div>
+          <div class="card"><span class="r">わたる</span><span class="s">渡る</span></div>
+        </div>
+        <div class="bubble-wrap" style="padding-left:62px">
+          <div class="bubble" style="--px:26px">
+            <div class="row sel"><span class="c">橋を</span><span class="h">川などに架ける</span></div>
+            <div class="row"><span class="c">箸を</span><span class="h">食事の道具</span></div>
+            <div class="row"><span class="c">端を</span><span class="h">物のへり・すみ</span></div>
+            <div class="row"><span class="c">はしを</span><span class="h">ひらがな</span></div>
+            <div class="more"><span class="k">Tab</span><span class="l">ほかの候補 2 件</span></div>
+          </div>
+        </div>
+        <div class="hint">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="state-head"><h3>入力中・たたむ</h3><span class="state-key">S1 Typing</span></div>
+      <p>打っている間の基本の形です。対象の文節は自動で決まり、自信の低い「はしを」が選ばれています。</p>
+      <ul>
+        <li><span class="name">文節カード</span>（対象・自信が低い）：塗りはアクセント色、<span class="name">読み</span>はオレンジ、<span class="name">注意バー</span>あり</li>
+        <li>対象の両隣の <span class="name">文節の仕切り</span> は消える</li>
+        <li><span class="name">候補の吹き出し</span>は上位 4 件。5 件以上あれば <span class="name">開閉行</span>「ほかの候補 N 件」</li>
+        <li><span class="name">本文の未確定文字列</span>は対象の文節だけ太い下線</li>
+      </ul>
+      <div class="pins"><span class="pin">InlineText</span><span class="pin">Panel</span><span class="pin">ClauseLane</span><span class="pin">ClauseCard</span><span class="pin">ClauseCard.WarningBar</span><span class="pin">ClauseDivider</span><span class="pin">CandidateBubble</span><span class="pin">CandidateRow</span><span class="pin">ExpandRow</span><span class="pin">KeyHint</span></div>
+    </div>
+  </div>
+
+  <!-- S2 -->
+  <div class="box specimen">
+    <div class="stage mac">
+      <div class="doc"><span class="u">橋の</span><span class="u f">箸を</span><span class="u">渡る</span><span class="caret"></span></div>
+      <div class="panel">
+        <div class="lane">
+          <div class="card"><span class="r">はしの</span><span class="s">橋の</span></div>
+          <div class="div h"></div>
+          <div class="card t"><span class="r">はしを</span><span class="s">箸を</span></div>
+          <div class="div h"></div>
+          <div class="card"><span class="r">わたる</span><span class="s">渡る</span></div>
+        </div>
+        <div class="bubble-wrap" style="padding-left:62px">
+          <div class="bubble" style="--px:26px">
+            <div class="row"><span class="c">橋を</span><span class="h">川などに架ける</span></div>
+            <div class="row sel"><span class="c">箸を</span><span class="h">食事の道具</span></div>
+            <div class="row"><span class="c">端を</span><span class="h">物のへり・すみ</span></div>
+            <div class="row"><span class="c">はしを</span><span class="h">ひらがな</span></div>
+            <div class="row"><span class="c">ハシヲ</span><span class="h">カタカナ</span></div>
+            <div class="row"><span class="c">嘴を</span><span class="h"></span></div>
+            <div class="more"><span class="k">Tab</span><span class="l">候補をたたむ</span></div>
+          </div>
+        </div>
+        <div class="hint">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="state-head"><h3>入力中・広げる</h3><span class="state-key">S2 TypingExpanded</span></div>
+      <p><kbd>Tab</kbd> か、4 件目から <kbd>↓</kbd> で広げた形です。ここでは「箸を」を選んだので、自信の低さの印（オレンジと <span class="name">注意バー</span>）が消えています。</p>
+      <ul>
+        <li><span class="name">候補の吹き出し</span>は 9 件ずつのページで出し、選んでいる候補のページを見せる。<span class="name">開閉行</span>は「候補をたたむ」</li>
+        <li>9 件を超えるときは、<span class="name">開閉行</span>を「候補をたたむ　10–18 / 63 件」のようにして位置も出す</li>
+        <li>文字を打つ・消すと、たたんだ形に戻る</li>
+      </ul>
+      <div class="pins"><span class="pin">CandidateBubble</span><span class="pin">CandidateRow</span><span class="pin">ExpandRow</span></div>
+    </div>
+  </div>
+
+  <!-- S3 -->
+  <div class="box specimen">
+    <div class="stage mac">
+      <div class="doc"><span class="u f">橋の</span><span class="u">橋を</span><span class="u">渡る</span><span class="caret"></span></div>
+      <div class="panel">
+        <div class="lane">
+          <div class="card t"><span class="r">はしの</span><span class="s">橋の</span></div>
+          <div class="div h"></div>
+          <div class="card low"><span class="r">はしを</span><span class="s">橋を</span></div>
+          <div class="div"></div>
+          <div class="card"><span class="r">わたる</span><span class="s">渡る</span></div>
+        </div>
+        <div class="bubble-wrap" style="padding-left:0">
+          <div class="bubble" style="--px:26px">
+            <div class="row sel"><span class="c">橋の</span><span class="h">川などに架ける</span></div>
+            <div class="row"><span class="c">箸の</span><span class="h">食事の道具</span></div>
+            <div class="row"><span class="c">端の</span><span class="h">物のへり・すみ</span></div>
+            <div class="row"><span class="c">はしの</span><span class="h">ひらがな</span></div>
+            <div class="more"><span class="k">Tab</span><span class="l">ほかの候補 2 件</span></div>
+          </div>
+        </div>
+        <div class="hint">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="state-head"><h3>文節選択中・たたむ</h3><span class="state-key">S3 Selecting</span></div>
+      <p><kbd>←</kbd> で「はしの」に動かした形です。見た目は入力中と同じで、対象の文節が変わるだけです。</p>
+      <ul>
+        <li>対象でなくなった「はしを」は、<span class="name">注意バー</span>とオレンジの<span class="name">読み</span>だけが残る</li>
+        <li><span class="name">候補の吹き出し</span>は新しい対象の左端へ移り、<span class="name">吹き出しの角</span>はその中央を指す</li>
+        <li><kbd>⇧←</kbd> <kbd>⇧→</kbd> で区切りを変えると、<span class="name">文節カード</span>の幅と並びが変わる</li>
+        <li>文節選択中・広げるの形は、入力中・広げると同じ</li>
+      </ul>
+      <div class="pins"><span class="pin">ClauseCard</span><span class="pin">CandidateBubble.Pointer</span><span class="pin">InlineText.FocusUnderline</span></div>
+    </div>
+  </div>
+
+  <!-- 1 文節 -->
+  <div class="box specimen">
+    <div class="stage mac">
+      <div class="doc"><span class="u">会議</span><span class="caret"></span></div>
+      <div class="panel">
+        <div class="lane">
+          <div class="card t"><span class="r">かいぎ</span><span class="s">会議</span></div>
+        </div>
+        <div class="bubble-wrap">
+          <div class="bubble" style="--px:30px">
+            <div class="row sel"><span class="c">会議</span><span class="h"></span></div>
+            <div class="row"><span class="c">懐疑</span><span class="h"></span></div>
+            <div class="row"><span class="c">かいぎ</span><span class="h">ひらがな</span></div>
+            <div class="row"><span class="c">カイギ</span><span class="h">カタカナ</span></div>
+            <div class="more"><span class="k">Tab</span><span class="l">ほかの候補 1 件</span></div>
+          </div>
+        </div>
+        <div class="hint">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="state-head"><h3>入力中・文節が 1 つ</h3><span class="state-key">S1 の一形態</span></div>
+      <p>打ち始めや短い語のとき。<span class="name">文節の仕切り</span>はなく、<span class="name">本文の未確定文字列</span>も分けません（太い下線もない）。</p>
+      <ul>
+        <li><span class="name">候補の吹き出し</span>は最小幅 140 なので、<span class="name">文節カード</span>より広くなりやすい</li>
+        <li>英字だけで打った文節では、候補に打ったとおりの英字（手がかり「英字」）が入る</li>
+      </ul>
+      <div class="pins"><span class="pin">ClauseCard</span><span class="pin">CandidateBubble</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 位置 ======================= -->
+<section id="placement">
+  <h2>パネルの位置</h2>
+  <p>位置はどの状態にも重なる性質です。パネルの左端は、変換の始まりの位置より 12pt 左。本文の行とは 4pt 離します。</p>
+  <div class="place">
+    <figure class="box" style="padding:14px">
+      <svg viewBox="0 0 240 140" role="img" aria-label="既定ではパネルは本文の行の下に出る">
+        <rect x="20" y="22" width="150" height="20" rx="3" fill="none" stroke="currentColor"></rect>
+        <text x="28" y="36" font-size="11">本文の行</text>
+        <rect x="8" y="48" width="200" height="70" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <text x="18" y="70" font-size="11.5" font-weight="700">変換パネル</text>
+        <text x="18" y="88" font-size="10.5">左端は 12pt 左・行と 4pt 離す</text>
+      </svg>
+      <figcaption>下に出す（既定）</figcaption>
+    </figure>
+    <figure class="box" style="padding:14px">
+      <svg viewBox="0 0 240 140" role="img" aria-label="画面の下端に近いときはパネルは本文の行の上に出る">
+        <rect x="8" y="14" width="200" height="70" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+        <text x="18" y="36" font-size="11.5" font-weight="700">変換パネル</text>
+        <text x="18" y="54" font-size="10.5">同じ変換の中では上のまま</text>
+        <rect x="20" y="92" width="150" height="20" rx="3" fill="none" stroke="currentColor"></rect>
+        <text x="28" y="106" font-size="11">本文の行</text>
+        <line x1="0" y1="128" x2="240" y2="128" stroke="currentColor" stroke-dasharray="3 3"></line>
+        <text x="236" y="124" font-size="10" text-anchor="end">画面の下端</text>
+      </svg>
+      <figcaption>上に出す（下に入らないとき）。中身の並びは同じで、吹き出しの角も上向きのまま。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ======================= アニメーション ======================= -->
+<section id="motion">
+  <h2>遷移とアニメーション</h2>
+  <p>見た目が変わるきっかけ（遷移）に名前をつけました。今アニメーションがあるのは <span class="name">登場</span> の 1 つだけで、その動きを <span class="name">ドロップイン</span> <span class="id">drop-in</span> と呼びます。</p>
+  <div class="box scroll">
+    <table>
+      <thead><tr><th>遷移の名前</th><th>きっかけ</th><th>変わる部品</th><th>アニメーション</th></tr></thead>
+      <tbody>
+        <tr><td><span class="name">登場</span> <span class="id">panel-enter</span></td><td>パネルなし → 入力中（最初の 1 文字）</td><td>変換パネル全体</td><td><span class="name">ドロップイン</span> <span class="id">drop-in</span>：透明度 0 → 1、位置 4pt 上 → 定位置、0.12 秒、緩急は既定（ゆっくり始まりゆっくり終わる）</td></tr>
+        <tr><td><span class="name">退場</span> <span class="id">panel-exit</span></td><td>確定・全部消す・入力をやめる</td><td>変換パネル全体</td><td>なし（すぐ消える）</td></tr>
+        <tr><td><span class="name">描き替え</span> <span class="id">panel-refresh</span></td><td>文字を打つ・消すたび</td><td>文節カード、候補の吹き出し、パネルの大きさ</td><td>なし（中身と大きさが一瞬で変わる）</td></tr>
+        <tr><td><span class="name">対象移動</span> <span class="id">target-move</span></td><td><kbd>←</kbd> <kbd>→</kbd>、対象の自動選び直し</td><td>文節カードの塗り、文節の仕切り、候補の吹き出しの位置と中身、対象の下線</td><td>なし（吹き出しが新しい位置へ飛ぶ）</td></tr>
+        <tr><td><span class="name">候補送り</span> <span class="id">candidate-step</span></td><td><kbd>Space</kbd> <kbd>↓</kbd> <kbd>↑</kbd></td><td>選んでいる候補行、文節カードの表記、本文</td><td>なし</td></tr>
+        <tr><td><span class="name">展開</span> / <span class="name">収納</span> <span class="id">list-expand / list-collapse</span></td><td><kbd>Tab</kbd>、4 件目から <kbd>↓</kbd>、文字を打つ（収納）</td><td>候補の吹き出しの行数、開閉行の文言、パネルの高さ</td><td>なし</td></tr>
+        <tr><td><span class="name">ページ送り</span> <span class="id">list-page</span></td><td>広げた状態で 9 件目をまたいで <kbd>↓</kbd> <kbd>↑</kbd></td><td>候補行の中身、開閉行の文言、パネルの幅</td><td>なし</td></tr>
+        <tr><td><span class="name">区切り変更</span> <span class="id">boundary-resize</span></td><td><kbd>⇧←</kbd> <kbd>⇧→</kbd></td><td>文節カードの幅と数、候補の吹き出し</td><td>なし</td></tr>
+        <tr><td><span class="name">位置反転</span> <span class="id">placement-flip</span></td><td>パネルが下に入らなくなったとき</td><td>変換パネルの位置（下 → 上）</td><td>なし</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box demo">
+    <h3>ドロップイン <span class="id">drop-in</span> の見本</h3>
+    <p class="note">ボタンを押すと、ブラウザで同じ動き（0.12 秒）を再生します。「10 倍遅く」で動きの形を確かめられます。動きを減らす設定にしている場合は再生しません。</p>
+    <div class="btns">
+      <button id="play" type="button">再生</button>
+      <button id="play-slow" type="button">10 倍遅く再生</button>
+    </div>
+    <div class="demo-stage mac">
+      <div class="doc"><span class="u f">か</span><span class="caret"></span></div>
+      <div class="panel" id="demo-panel">
+        <div class="lane"><div class="card t"><span class="r">か</span><span class="s">か</span></div></div>
+        <div class="bubble-wrap">
+          <div class="bubble" style="--px:16px">
+            <div class="row sel"><span class="c">か</span><span class="h">ひらがな</span></div>
+            <div class="row"><span class="c">カ</span><span class="h">カタカナ</span></div>
+            <div class="row"><span class="c">化</span><span class="h"></span></div>
+            <div class="row"><span class="c">課</span><span class="h"></span></div>
+            <div class="more"><span class="k">Tab</span><span class="l">ほかの候補 5 件</span></div>
+          </div>
+        </div>
+        <div class="hint">Tab 広げる　Esc 読みに戻す　⇧← → 区切り</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="topics">
+  <h2>デザインで話すときの手がかり</h2>
+  <div class="callout">
+    <p>今の作りから読み取れる、見た目の論点です。決めたものではありません。</p>
+    <ul>
+      <li><span class="name">入力中</span>と<span class="name">文節選択中</span>は見た目が同じ。今どちらにいるかを見せるかどうか</li>
+      <li><span class="name">対象移動</span>で<span class="name">候補の吹き出し</span>が一瞬で飛ぶ。動きをつけるか</li>
+      <li><span class="name">描き替え</span>のたびにパネルの幅と高さが変わる。打つたびに揺れて見えないか</li>
+      <li>自信が低くて対象でもある文節は、<span class="name">読み</span>のオレンジがアクセント色に勝つ。対象であることが伝わるか</li>
+      <li><span class="name">退場</span>にアニメーションがない。<span class="name">登場</span>と対にするか</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+<script>
+(function () {
+  var panel = document.getElementById("demo-panel");
+  function play(slow) {
+    panel.classList.remove("play", "slow");
+    void panel.offsetWidth;
+    panel.classList.add("play");
+    if (slow) { panel.classList.add("slow"); }
+  }
+  document.getElementById("play").addEventListener("click", function () { play(false); });
+  document.getElementById("play-slow").addEventListener("click", function () { play(true); });
+})();
+</script>
+</body>
+</html>
