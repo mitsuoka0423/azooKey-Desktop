@@ -187,7 +187,7 @@ button:focus-visible { outline: 2px solid var(--tag); outline-offset: 2px; }
 <header style="display:grid;gap:10px">
   <h1>変換パネルの状態と UI</h1>
   <p class="lead">見た目のデザインを話すための資料です。変換パネルのどの部品がどの状態でどう見えるか、状態が変わるときに何が動くかをまとめました。部品とアニメーションには名前をつけてあるので、「<span class="name">文節カード</span>の<span class="name">注意バー</span>を太くしたい」のように名前で指せます。</p>
-  <p class="note">元にしたのは main（v1.0.5）のコードです（<code>LiveConversionPanelView.swift</code>、<code>LiveConversionCandidateListView.swift</code>、<code>LiveConversionPanelModel.swift</code>）。マージ前の PR #15（候補のページ送り）で変わるところは、その旨を書き添えています。見本の文字と候補は例です。</p>
+  <p class="note">元にしたのは main のコード（PR #15 の候補のページ送りまで）です（<code>LiveConversionPanelView.swift</code>、<code>LiveConversionCandidateListView.swift</code>、<code>LiveConversionPanelModel.swift</code>）。見本の文字と候補は例です。</p>
 </header>
 
 <!-- ======================= 部品の地図 ======================= -->
@@ -226,7 +226,7 @@ button:focus-visible { outline: 2px solid var(--tag); outline-offset: 2px; }
         <tr><td><span class="name">候補の吹き出し</span> <span class="id">CandidateBubble</span></td><td>角丸 6、枠線 1px、背景 85% 不透明、最小幅 140。左端を対象の文節カードの左端にそろえる</td><td>対象の文節が変わると位置が飛ぶ。候補が 5 件以上なら開閉行が出る</td></tr>
         <tr><td><span class="name">吹き出しの角</span> <span class="id">CandidateBubble.Pointer</span></td><td>高さ 6、幅 14 の三角。枠線は三角のところだけ途切れる</td><td>対象の文節カードの中央を指す</td></tr>
         <tr><td><span class="name">候補行</span> <span class="id">CandidateRow</span></td><td>余白 上下 2・左右 6、角丸 4。候補と手がかりの間 8</td><td>選んでいる行：アクセント色の塗り、文字は白</td></tr>
-        <tr><td><span class="name">開閉行</span> <span class="id">ExpandRow</span></td><td>「Tab」10pt 中太 ＋ 文言 11pt、どちらも薄い色</td><td>たたむ：「ほかの候補 N 件」／広げる：「候補をたたむ」（PR #15 後は「候補をたたむ　10–18 / 63 件」）</td></tr>
+        <tr><td><span class="name">開閉行</span> <span class="id">ExpandRow</span></td><td>「Tab」10pt 中太 ＋ 文言 11pt、どちらも薄い色</td><td>たたむ：「ほかの候補 N 件」／広げる：「候補をたたむ」。9 件を超えるときは「候補をたたむ　10–18 / 63 件」のように今のページの位置も出す</td></tr>
         <tr><td><span class="name">キーヒント</span> <span class="id">KeyHint</span></td><td>10pt、さらに薄い色、右寄せ</td><td>いつも同じ文言</td></tr>
         <tr><td><span class="name">本文の未確定文字列</span> <span class="id">InlineText</span></td><td>文節ごとに下線を分け、対象の文節は太い下線（下線の描き方はアプリ任せ）</td><td>文節が 1 つのときは分けず、太い下線もない</td></tr>
       </tbody>
@@ -404,8 +404,8 @@ button:focus-visible { outline: 2px solid var(--tag); outline-offset: 2px; }
       <div class="state-head"><h3>入力中・広げる</h3><span class="state-key">S2 TypingExpanded</span></div>
       <p><kbd>Tab</kbd> か、4 件目から <kbd>↓</kbd> で広げた形です。ここでは「箸を」を選んだので、自信の低さの印（オレンジと <span class="name">注意バー</span>）が消えています。</p>
       <ul>
-        <li><span class="name">候補の吹き出し</span>は最大 9 件。<span class="name">開閉行</span>は「候補をたたむ」</li>
-        <li>PR #15 後：9 件ずつのページで送り、<span class="name">開閉行</span>は「候補をたたむ　10–18 / 63 件」のように位置も出す</li>
+        <li><span class="name">候補の吹き出し</span>は 9 件ずつのページで出し、選んでいる候補のページを見せる。<span class="name">開閉行</span>は「候補をたたむ」</li>
+        <li>9 件を超えるときは、<span class="name">開閉行</span>を「候補をたたむ　10–18 / 63 件」のようにして位置も出す</li>
         <li>文字を打つ・消すと、たたんだ形に戻る</li>
       </ul>
       <div class="pins"><span class="pin">CandidateBubble</span><span class="pin">CandidateRow</span><span class="pin">ExpandRow</span></div>
@@ -525,7 +525,7 @@ button:focus-visible { outline: 2px solid var(--tag); outline-offset: 2px; }
         <tr><td><span class="name">対象移動</span> <span class="id">target-move</span></td><td><kbd>←</kbd> <kbd>→</kbd>、対象の自動選び直し</td><td>文節カードの塗り、文節の仕切り、候補の吹き出しの位置と中身、対象の下線</td><td>なし（吹き出しが新しい位置へ飛ぶ）</td></tr>
         <tr><td><span class="name">候補送り</span> <span class="id">candidate-step</span></td><td><kbd>Space</kbd> <kbd>↓</kbd> <kbd>↑</kbd></td><td>選んでいる候補行、文節カードの表記、本文</td><td>なし</td></tr>
         <tr><td><span class="name">展開</span> / <span class="name">収納</span> <span class="id">list-expand / list-collapse</span></td><td><kbd>Tab</kbd>、4 件目から <kbd>↓</kbd>、文字を打つ（収納）</td><td>候補の吹き出しの行数、開閉行の文言、パネルの高さ</td><td>なし</td></tr>
-        <tr><td><span class="name">ページ送り</span> <span class="id">list-page</span>（PR #15）</td><td>広げた状態で 9 件目をまたいで <kbd>↓</kbd> <kbd>↑</kbd></td><td>候補行の中身、開閉行の文言、パネルの幅</td><td>なし</td></tr>
+        <tr><td><span class="name">ページ送り</span> <span class="id">list-page</span></td><td>広げた状態で 9 件目をまたいで <kbd>↓</kbd> <kbd>↑</kbd></td><td>候補行の中身、開閉行の文言、パネルの幅</td><td>なし</td></tr>
         <tr><td><span class="name">区切り変更</span> <span class="id">boundary-resize</span></td><td><kbd>⇧←</kbd> <kbd>⇧→</kbd></td><td>文節カードの幅と数、候補の吹き出し</td><td>なし</td></tr>
         <tr><td><span class="name">位置反転</span> <span class="id">placement-flip</span></td><td>パネルが下に入らなくなったとき</td><td>変換パネルの位置（下 → 上）</td><td>なし</td></tr>
       </tbody>
