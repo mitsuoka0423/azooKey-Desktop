@@ -189,7 +189,7 @@ struct LiveConversionClauseTests {
         #expect(manager.getLiveConversionPanelModel().columns.last?.isTarget == true)
         let list = manager.getLiveConversionPanelModel().candidateList?.items.map(\.text) ?? []
         #expect(list.contains("箸を"))
-        for _ in 0..<LiveConversionPanelState.maxCandidateCount where manager.getLiveConversionClauses().last?.surface != "箸を" {
+        for _ in 0..<LiveConversionPanelState.pageCandidateCount where manager.getLiveConversionClauses().last?.surface != "箸を" {
             #expect(manager.handleLiveConversionPanelKey(.down) == .handled)
         }
         #expect(manager.getLiveConversionClauses().last?.surface == "箸を")

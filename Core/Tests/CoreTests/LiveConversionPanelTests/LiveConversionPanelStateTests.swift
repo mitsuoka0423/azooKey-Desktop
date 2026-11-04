@@ -236,7 +236,7 @@ struct LiveConversionPanelModelTests {
         #expect(model.candidateList?.moreRowTitle == "ほかの候補 2 件")
     }
 
-    @Test("広げると最大 9 件で「候補をたたむ」")
+    @Test("広げると 9 件まで出して「候補をたたむ」")
     func expanded() {
         let model = LiveConversionPanelModel.make(
             clauses: Self.clauses,
@@ -278,18 +278,51 @@ struct LiveConversionPanelModelTests {
         #expect(LiveConversionPanelModel.candidates(engineSurface: "橋を", reading: "はしを", dictionaryCandidates: ["橋を", "箸を", "端を"])
                     == ["橋を", "箸を", "端を", "はしを", "ハシヲ"])
         let many = (1...20).map { "候補\($0)" }
-        #expect(LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: many).count == 9)
+        // 9 件に収まらない辞書の候補は、ひらがな・カタカナの後ろに続ける
+        let all = LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: many)
+        #expect(all.count == 23)
+        #expect(Array(all[6..<10]) == ["候補6", "あ", "ア", "候補7"])
+        #expect(all.last == "候補20")
+        let huge = (1...200).map { "候補\($0)" }
+        #expect(LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: huge).count == 100)
     }
 
     @Test("ひらがな・カタカナ・打ったとおりの英字は、辞書の候補が多くても残る")
     func fixedCandidatesStay() {
         let many = (1...20).map { "候補\($0)" }
         let result = LiveConversionPanelModel.candidates(engineSurface: "後地", reading: "のっち", dictionaryCandidates: many + ["ノッチ"], typed: "notti")
-        #expect(result.count == 9)
+        #expect(result.count == 24)
         #expect(result.first == "後地")
-        #expect(Array(result.suffix(3)) == ["ノッチ", "のっち", "notti"])
+        #expect(Array(result[6..<9]) == ["ノッチ", "のっち", "notti"])
         // 本文がすでにカタカナなら、カタカナは重ねない
         #expect(LiveConversionPanelModel.candidates(engineSurface: "ノッチ", reading: "のっち", dictionaryCandidates: [], typed: "notti")
                     == ["ノッチ", "のっち", "notti"])
+    }
+
+    @Test("9 件を超える候補は、9 件ずつのページで出し、選んでいる候補のページを見せる")
+    func pagedCandidates() {
+        let candidates = (1...20).map { "候補\($0)" }
+        let clauses: [LiveConversionClause] = [.init(reading: "こうほ", surface: "候補1")]
+        // たたんでいるときは上位 4 件と「ほかの候補 16 件」
+        let collapsed = LiveConversionPanelModel.make(clauses: clauses, state: .init(), targetCandidates: candidates)
+        #expect(collapsed.candidateList?.items.count == 4)
+        #expect(collapsed.candidateList?.moreRowTitle == "ほかの候補 16 件")
+
+        // ↓ で 10 件目まで進むと、2 ページ目（10〜18 件目）を出す
+        var state = LiveConversionPanelState()
+        for _ in 0..<9 {
+            _ = state.handle(.down, clauses: clauses, candidates: { _ in candidates })
+        }
+        #expect(state.applying(to: clauses)[0].surface == "候補10")
+        let second = LiveConversionPanelModel.make(clauses: clauses, state: state, targetCandidates: candidates)
+        #expect(second.candidateList?.items.first?.text == "候補10")
+        #expect(second.candidateList?.selectedIndex == 0)
+        #expect(second.candidateList?.moreRowTitle == "候補をたたむ　10–18 / 20 件")
+
+        // 最後から ↓ で先頭に戻る
+        for _ in 0..<11 {
+            _ = state.handle(.down, clauses: clauses, candidates: { _ in candidates })
+        }
+        #expect(state.applying(to: clauses)[0].surface == "候補1")
     }
 }
