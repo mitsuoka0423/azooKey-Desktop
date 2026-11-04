@@ -29,23 +29,29 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
         public var items: [CandidateItem]
         /// 選択中の行（`items` の位置）
         public var selectedIndex: Int?
-        /// たたんでいて出していない候補の件数。0 なら「ほかの候補」の行を出さない
-        public var hiddenCount: Int
+        /// `items` が全候補の何件目から何件目か
+        public var range: Range<Int>
+        /// 全候補の件数
+        public var totalCount: Int
         public var isExpanded: Bool
 
-        public init(items: [CandidateItem], selectedIndex: Int?, hiddenCount: Int, isExpanded: Bool) {
+        public init(items: [CandidateItem], selectedIndex: Int?, range: Range<Int>, totalCount: Int, isExpanded: Bool) {
             self.items = items
             self.selectedIndex = selectedIndex
-            self.hiddenCount = hiddenCount
+            self.range = range
+            self.totalCount = totalCount
             self.isExpanded = isExpanded
         }
 
         /// 候補リストの末尾の行。出さないときは `nil`
         public var moreRowTitle: String? {
             if self.isExpanded {
-                "候補をたたむ"
-            } else if self.hiddenCount > 0 {
-                "ほかの候補 \(self.hiddenCount) 件"
+                // 1 ページに収まらないときは、今どこを出しているかも示す
+                self.totalCount > LiveConversionPanelState.pageCandidateCount
+                    ? "候補をたたむ　\(self.range.lowerBound + 1)–\(self.range.upperBound) / \(self.totalCount) 件"
+                    : "候補をたたむ"
+            } else if self.totalCount > self.range.count {
+                "ほかの候補 \(self.totalCount - self.range.count) 件"
             } else {
                 nil
             }
@@ -89,30 +95,42 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
         guard let target, !targetCandidates.isEmpty else {
             return .init(columns: columns, targetIndex: target, candidateList: nil)
         }
-        let visible = state.visibleCandidateCount(total: targetCandidates.count)
-        let items = targetCandidates.prefix(visible).map { text in
+        let total = targetCandidates.count
+        let selected = targetCandidates.firstIndex(of: shown[target].surface)
+        let range: Range<Int>
+        if state.isExpanded {
+            // 9 件ずつのページに分け、選んでいる候補のページを出す
+            let page = LiveConversionPanelState.pageCandidateCount
+            let start = (selected ?? 0) / page * page
+            range = start..<min(start + page, total)
+        } else {
+            range = 0..<min(total, LiveConversionPanelState.shownCandidateCount)
+        }
+        let items = targetCandidates[range].map { text in
             CandidateItem(text: text, hint: hint(text))
         }
         let list = CandidateList(
             items: items,
-            selectedIndex: items.firstIndex { $0.text == shown[target].surface },
-            hiddenCount: min(targetCandidates.count, LiveConversionPanelState.maxCandidateCount) - visible,
+            selectedIndex: selected.flatMap { range.contains($0) ? $0 - range.lowerBound : nil },
+            range: range,
+            totalCount: total,
             isExpanded: state.isExpanded
         )
         return .init(columns: columns, targetIndex: target, candidateList: list)
     }
 
-    /// 文節の候補を並べる。エンジンの表記を先頭に、辞書変換の候補、ひらがな、カタカナ、打ったとおりの英字の順。重なりを除き、最大 9 件。
-    /// 9 件を超えるときは辞書の候補を後ろから減らし、ひらがな・カタカナ・英字は残す
+    /// 文節の候補を並べる。最初の 9 件は、エンジンの表記を先頭に、辞書変換の候補、ひらがな、カタカナ、打ったとおりの英字の順。
+    /// 9 件に収まらない辞書の候補は、その後ろに続ける（ひらがな・カタカナ・英字を最初のページに残すため）。重なりを除き、最大 100 件
     public static func candidates(engineSurface: String, reading: String, dictionaryCandidates: [String], typed: String? = nil) -> [String] {
         let fixed = [reading, Self.katakana(reading), typed ?? ""]
         var seen = Set<String>()
-        var all = ([engineSurface] + dictionaryCandidates + fixed).filter { !$0.isEmpty && seen.insert($0).inserted }
-        while all.count > LiveConversionPanelState.maxCandidateCount,
-              let last = all.indices.dropFirst().last(where: { !fixed.contains(all[$0]) }) {
-            all.remove(at: last)
+        var firstPage = ([engineSurface] + dictionaryCandidates + fixed).filter { !$0.isEmpty && seen.insert($0).inserted }
+        var rest: [String] = []
+        while firstPage.count > LiveConversionPanelState.pageCandidateCount,
+              let last = firstPage.indices.dropFirst().last(where: { !fixed.contains(firstPage[$0]) }) {
+            rest.insert(firstPage.remove(at: last), at: 0)
         }
-        return all
+        return Array((firstPage + rest).prefix(LiveConversionPanelState.maxCandidateCount))
     }
 
     static func katakana(_ text: String) -> String {

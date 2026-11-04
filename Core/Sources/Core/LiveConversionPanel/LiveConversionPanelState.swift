@@ -73,8 +73,10 @@ public struct LiveConversionPanelState: Sendable, Equatable {
 
     /// 普段の候補リストに出す件数
     public static let shownCandidateCount = 4
-    /// 広げたときに出す最大の件数
-    public static let maxCandidateCount = 9
+    /// 広げたときに一度に出す件数（1 ページ）
+    public static let pageCandidateCount = 9
+    /// 文節の候補として並べる最大の件数
+    public static let maxCandidateCount = 100
 
     public var mode: Mode = .typing
     /// 対象の文節の候補を広げているか
@@ -178,9 +180,9 @@ public struct LiveConversionPanelState: Sendable, Equatable {
         }
     }
 
-    /// 候補リストに今出している件数
-    public func visibleCandidateCount(total: Int) -> Int {
-        self.isExpanded ? min(total, Self.maxCandidateCount) : min(total, Self.shownCandidateCount)
+    /// ↑ ↓ で選べる件数。たたんでいるときは上位 4 件、広げているときは全部
+    public func selectableCandidateCount(total: Int) -> Int {
+        self.isExpanded ? total : min(total, Self.shownCandidateCount)
     }
 
     /// 文字の入力や削除のあと。入力に戻り、広げた候補をたたむ（選んだ表記は保つ）
@@ -236,7 +238,7 @@ public struct LiveConversionPanelState: Sendable, Equatable {
             return
         }
         let current = list.firstIndex(of: self.applying(to: clauses)[target].surface) ?? 0
-        let visible = self.visibleCandidateCount(total: list.count)
+        let visible = self.selectableCandidateCount(total: list.count)
         let next: Int
         if !self.isExpanded, list.count > visible, delta > 0, current >= visible - 1 {
             // 4 件目から下に進むと、候補を広げて 5 件目へ
