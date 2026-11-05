@@ -114,6 +114,42 @@ struct MixedInputConversionTests {
         }
     }
 
+    @Test("英語と判定された部分も、区切りを直せば、打ったキーをローマ字として読み直した候補を選べる")
+    func rereadEnglishClauseAsRomaji() {
+        let manager = Self.manager()
+        // 大文字で始めて、kiri を英語と判定させる
+        manager.englishWordChecker = WordListChecker.adding(["kiri"])
+        Self.type(manager, "waribiKiritu")
+        #expect(manager.getLiveConversionClauses().map(\.reading) == ["わりび", "Kiriつ"])
+        let texts = { manager.getLiveConversionPanelModel().candidateList.map { list in list.items.map(\.text) } ?? [] }
+
+        // 英字を含む文節でも、読み直した「きりつ」の候補が出る
+        #expect(manager.handleLiveConversionPanelKey(.right) == .handled)
+        _ = manager.handleLiveConversionPanelKey(.tab)
+        #expect(texts().contains("規律"))
+
+        // 区切りを「わりびKi｜riつ」に直すと、それぞれの文節に「割引」「率」が出る
+        #expect(manager.handleLiveConversionPanelKey(.left) == .handled)
+        #expect(manager.handleLiveConversionPanelKey(.extend) == .handled)
+        #expect(manager.handleLiveConversionPanelKey(.extend) == .handled)
+        #expect(manager.getLiveConversionClauses().map(\.reading) == ["わりびKi", "riつ"])
+        _ = manager.handleLiveConversionPanelKey(.tab)
+        let first = texts()
+        #expect(first.contains("割引"))
+        #expect(first.contains("わりびき"))
+        for _ in first.indices where manager.getLiveConversionClauses().first?.surface != "割引" {
+            _ = manager.handleLiveConversionPanelKey(.down)
+        }
+        #expect(manager.handleLiveConversionPanelKey(.right) == .handled)
+        _ = manager.handleLiveConversionPanelKey(.tab)
+        let second = texts()
+        #expect(second.contains("率"))
+        for _ in second.indices where manager.getLiveConversionClauses().last?.surface != "率" {
+            _ = manager.handleLiveConversionPanelKey(.down)
+        }
+        #expect(manager.getLiveConversionClauses().map(\.surface).joined() == "割引率")
+    }
+
     @Test("例文：PRをStacked PRにして（英単語の間は Shift+Space）")
     func example() {
         let manager = Self.manager()
@@ -243,7 +279,9 @@ struct MixedInputSpellCheckerTests {
             ("sonofilewoeditsite", "そのfileをeditして"),
             ("rebasesuru", "rebaseする"),
             // 促音の重ねた子音の間では英単語を終えない（not＋ち にしない）
-            ("notti", "のっち")
+            ("notti", "のっち"),
+            // 辞書の複合語（mid 501 でも漢字を含む）の中から、スペルチェッカーが認める語（kiri）を英語として抜き出さない
+            ("waribikiritu", "割引率")
         ] {
             let manager = SegmentsManager(
                 kanaKanjiConverter: KanaKanjiConverter.withDefaultDictionary(),

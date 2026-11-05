@@ -1210,7 +1210,7 @@ public final class SegmentsManager {
                 guard let target else {
                     return ""
                 }
-                return self.hintProvider.displayHint(for: candidate, reading: clauses[target].reading)
+                return self.hintProvider.displayHint(for: candidate, reading: self.candidateReading(clauses, at: target))
             }
         )
     }
@@ -1372,16 +1372,34 @@ public final class SegmentsManager {
     /// 文節の候補。先頭は本文の表記。打ったキーの並びが英単語なら 2 番目にそれを置く（「来て」に対する「kite」）
     private func clauseCandidates(_ clauses: [LiveConversionClause], at index: Int) -> [String] {
         let clause = clauses[index]
-        var dictionaryCandidates = self.dictionaryCandidates(for: clause.reading).map(\.text)
+        let reading = self.candidateReading(clauses, at: index)
+        var dictionaryCandidates = self.dictionaryCandidates(for: reading).map(\.text)
         if let typed = self.typedEnglishWord(clauses, at: index) {
             dictionaryCandidates.insert(typed, at: 0)
         }
         return LiveConversionPanelModel.candidates(
             engineSurface: clause.surface,
-            reading: clause.reading,
+            reading: reading,
             dictionaryCandidates: dictionaryCandidates,
             typed: self.typedLetters(clauses, at: index)
         )
+    }
+
+    /// 候補を作るときの文節の読み。英字のまま渡した部分を含む文節は、打ったキーをローマ字として読み直したかなにする。
+    /// 英語と誤って判定された部分も、区切りを直せば日本語の候補を選べるようにするため（「わりびki」→「わりびき」→「割引」）。
+    /// 読み直してもかなにならない文節（「branchを」）と、打ちかけのローマ字は、そのままの読みを使う
+    private func candidateReading(_ clauses: [LiveConversionClause], at index: Int) -> String {
+        let reading = clauses[index].reading
+        guard reading.unicodeScalars.contains(where: \.isASCII),
+              !clauses[index].isUnconverted,
+              self.lastInputStyle != .direct,
+              let typed = self.typedLetters(clauses, at: index) else {
+            return reading
+        }
+        var text = ComposingText()
+        text.insertAtCursorPosition(typed.lowercased(), inputStyle: self.lastInputStyle)
+        let kana = text.convertTarget
+        return kana.unicodeScalars.contains(where: \.isASCII) ? reading : kana
     }
 
     /// 文節を打ったとおりの英字（「ノッチ」に対する「notti」）。英字以外のキーを含むときは出さない

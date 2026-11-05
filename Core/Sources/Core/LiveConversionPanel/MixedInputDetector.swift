@@ -117,7 +117,7 @@ public enum MixedInputDetector {
             for element in reading.elements {
                 let range = position..<(position + element.ruby.count)
                 elementRanges.append((range, Self.isDictionaryWord(element)))
-                if element.mid != MixedInputDetector.unknownWordMid {
+                if !Self.isFiller(element) {
                     wordRanges.append((range, element.word.unicodeScalars.allSatisfy { (0x30A1...0x30FC).contains($0.value) }))
                 }
                 position += element.ruby.count
@@ -127,10 +127,16 @@ public enum MixedInputDetector {
             self.elements = reading.elements
         }
 
+        /// エンジンが辞書にない字の並べ方で埋めた要素か（「こっ｜みつ｜ィ」）。mid 501 には辞書の複合語（「割引率」）も
+        /// あるので、漢字を含むものは埋めた要素とみなさない
+        private static func isFiller(_ element: DicdataElement) -> Bool {
+            element.mid == MixedInputDetector.unknownWordMid && LiveConversionConfidence.isKanaOnly(element.word)
+        }
+
         /// 辞書の語として数えるか。辞書にない字の並べ方で埋めた要素と、学習から来たかなだけの語
         /// （英単語をローマ字のつもりで打って確定した「コッミツィテ」など）は数えない
         private static func isDictionaryWord(_ element: DicdataElement) -> Bool {
-            if element.mid == MixedInputDetector.unknownWordMid {
+            if Self.isFiller(element) {
                 return false
             }
             if element.metadata.contains(.isLearned), LiveConversionConfidence.isKanaOnly(element.word) {
@@ -270,7 +276,8 @@ public enum MixedInputDetector {
             text.insertAtCursorPosition([element])
             lengths.append(text.convertTarget.count)
         }
-        guard let start = lengths.firstIndex(of: range.lowerBound),
+        // 打ちかけの子音（「わりb」の b）で長さが同じになる位置があるので、始まりも終わりも、その長さになった最後の位置を使う
+        guard let start = lengths.lastIndex(of: range.lowerBound),
               let end = lengths.lastIndex(of: range.upperBound),
               start < end else {
             return nil
