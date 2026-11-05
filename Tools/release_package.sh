@@ -83,9 +83,10 @@ codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${BUILD_DIR}/azooKeyMac.zip"
 notarize_and_staple "${BUILD_DIR}/azooKeyMac.zip" "${APP_PATH}"
 
-# 5. pkg にまとめる
+# 5. pkg にまとめる。distribution.xml で入れる先をホームに限っているので、
+#    install-location の /Library/Input Methods は ~/Library/Input Methods になる
 mkdir -p "${BUILD_DIR}/scripts" "${BUILD_DIR}/packages"
-cp pkg-scripts/postinstall Tools/remove_converter_server_launch_agent.sh "${BUILD_DIR}/scripts/"
+cp pkg-scripts/postinstall "${BUILD_DIR}/scripts/"
 chmod +x "${BUILD_DIR}/scripts/"*
 pkgbuild \
     --root "${ROOT_DIR}" \

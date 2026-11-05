@@ -3,6 +3,8 @@
     <pkg-ref id="dev.ensan.inputmethod.azooKeyMac"/>
     <title>azooKey</title>
     <options customize="never" require-scripts="false" hostArchitectures="x86_64,arm64"/>
+    <!-- 管理者の権限なしで入れ直せるよう、使う人のホーム（~/Library/Input Methods）にだけ入れる -->
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
     <choices-outline>
         <line choice="default">
             <line choice="dev.ensan.inputmethod.azooKeyMac"/>

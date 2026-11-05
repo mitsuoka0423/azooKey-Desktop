@@ -12,11 +12,21 @@ macOS 15で動作確認しています。macOS 14およびmacOS 26でも利用�
 
 [Releases](https://github.com/ensan-hcl/azooKey-Desktop/releases)から`.pkg`ファイルをダウンロードして、インストールしてください。
 
-その後、以下の手順で利用できます。
+`.pkg`は、使う人のホームの`~/Library/Input Methods`にインストールします。管理者のパスワードは要りません。
+
+初めてインストールしたときは、以下の手順で利用できます。
 
 - macOSからログアウトし、再ログイン
 - 「設定」>「キーボード」>「入力ソース」を編集>「+」ボタン>「日本語」>azooKeyを追加>完了
 - メニューバーアイコンからazooKeyを選択
+
+新しい版を同じように`.pkg`でインストールしたときは、ログアウトは要りません。インストールの最後に古いazooKeyのプロセスを止めるので、次にキーを打ったときから新しい版が動きます。反映されないときは、入力ソースをいったん別のものに切り替えてから、azooKeyに戻してください。
+
+以前の版を`/Library/Input Methods`にインストールしていた場合は、どちらが使われるか定まらないので、一度だけ次のコマンドで古いほうを消してください。
+
+```bash
+sudo rm -rf "/Library/Input Methods/azooKeyMac.app"
+```
 
 ### Install with Homebrew
 または、Homebrewを用いてインストールすることもできます。
@@ -108,7 +118,7 @@ ls -lh azooKeyMac/Resources/zenz-v3.1-small-gguf/ggml-model-Q5_K_M.gguf
 ./install.sh
 ```
 
-`.pkg`によるインストールと同等の状態になります。その後、上記の「リリース版インストール」の手順（ログアウト→入力ソース追加）を行ってください。
+`install.sh`は`sudo`で`/Library/Input Methods`にインストールします（`.pkg`はホームの`~/Library/Input Methods`です）。`sudo`を使わずにホームへ入れ直す場合は`Tools/dev_install_user.sh`を使ってください。どちらも、その後に上記の「リリース版インストール」の手順（ログアウト→入力ソース追加）を行ってください。両方の場所に残っているとどちらが使われるか定まらないので、片方だけにしてください。
 
 開発中はazooKeyのプロセスをkillすることで最新版を反映することが出来ます。また、必要に応じて入力ソースからazooKeyを削除して再度追加する、macOSからログアウトして再ログインするなど、リセットが必要になる場合があります。
 
