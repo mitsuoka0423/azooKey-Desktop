@@ -1,5 +1,16 @@
 #!/bin/sh
 set -eu
 
-script_dir="$(cd "$(dirname "$0")" && pwd)"
-"${script_dir}/remove_converter_server_launch_agent.sh"
+# pkg は使う人のホーム（~/Library/Input Methods）に入れるので、このスクリプトはその人の権限で動く
+service_name="dev.mitsuoka0423.inputmethod.azooKeyMac.ConverterServer"
+user_home="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory: //')"
+
+# XPC版からのアップグレード時に、KeepAlive付きの旧変換プロセスを止める。
+# /Library/LaunchAgents に残った plist は管理者の権限がないと消せないので、ここでは扱わない
+launchctl bootout "gui/$(id -u)/${service_name}" >/dev/null 2>&1 || true
+if [ -n "${user_home}" ]; then
+    rm -f "${user_home}/Library/LaunchAgents/${service_name}.plist"
+fi
+
+# 動いている古い入力ソースのプロセスを止める。次にキーを打ったときに、新しい中身で起動する
+pkill -x -u "$(id -u)" azooKeyMac || true
