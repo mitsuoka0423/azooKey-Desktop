@@ -5,6 +5,8 @@ import SwiftUI
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var liveConversionPanel = Config.LiveConversionPanel()
+    @ConfigState private var voiceInput = Config.VoiceInput()
+    @ConfigState private var voiceInputShortcut = Config.VoiceInputShortcut()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
@@ -510,6 +512,19 @@ struct ConfigWindow: View {
                 }
             } header: {
                 Label("変換設定", systemImage: "brain")
+            }
+
+            Section {
+                Toggle("音声入力を使う", isOn: $voiceInput)
+                LabeledContent("始める・止めるキー") {
+                    KeyboardShortcutRecorder(shortcut: $voiceInputShortcut, defaultShortcut: .defaultVoiceInputShortcut)
+                        .frame(width: 160, height: 24)
+                }
+                .disabled(!$voiceInput.wrappedValue)
+            } header: {
+                Label("音声入力", systemImage: "mic")
+            } footer: {
+                Text("話した言葉を Mac の中だけで認識して入力します（音声は外に送りません）。聞き取り中は Enter かもう一度キーを押すと確定、Esc で取り消します。初めて使うときにマイクと音声認識の許可を求めます。")
             }
         }
         .formStyle(.grouped)

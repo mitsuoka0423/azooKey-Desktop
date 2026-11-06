@@ -15,6 +15,12 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var appMenu: NSMenu
     var liveConversionToggleMenuItem: NSMenuItem
     var transformSelectedTextMenuItem: NSMenuItem
+    var voiceInputMenuItem: NSMenuItem
+
+    /// 音声入力の状態（状態の変化は Core の VoiceInputSession が決める）
+    var voiceInputSession = VoiceInputSession()
+    /// 止めたあとの時間切れを、いちばん新しいものだけ効かせるための番号
+    var voiceInputFinishToken = 0
 
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController
@@ -120,6 +126,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.appMenu = NSMenu(title: "azooKey")
         self.liveConversionToggleMenuItem = NSMenuItem()
         self.transformSelectedTextMenuItem = NSMenuItem()
+        self.voiceInputMenuItem = NSMenuItem()
 
         let candidatesViewController = CandidatesViewController()
         let predictionViewController = PredictionCandidatesViewController()
@@ -155,6 +162,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         CustomInputTableStore.registerIfExists()
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.updateTransformSelectedTextMenuItemEnabledState()
+        self.updateVoiceInputMenuItem()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()
@@ -178,6 +186,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     override func deactivateServer(_ sender: Any!) {
+        self.endVoiceInputOnFocusLost(client: sender as? IMKTextInput)
         self.segmentsManager.deactivate(flushLearningData: false)
         (NSApplication.shared.delegate as? AppDelegate)?.scheduleLearningDataCommit()
         self.inputState = .none
@@ -191,6 +200,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
 
     @MainActor
     override func commitComposition(_ sender: Any!) {
+        if self.voiceInputSession.isActive {
+            self.endVoiceInputOnFocusLost(client: sender as? IMKTextInput)
+            return
+        }
         // Unicode入力モードの場合は状態だけリセットして終了
         // マウスクリック等でOSがMarkedTextを確定した場合、IME側からは消せないため
         if case .unicodeInput = self.inputState {
@@ -254,7 +267,8 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override func menu() -> NSMenu! {
-        self.appMenu
+        self.updateVoiceInputMenuItem()
+        return self.appMenu
     }
 
     // swiftlint:disable:next cyclomatic_complexity
@@ -267,6 +281,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         }
         guard event.type == .keyDown else {
             return false
+        }
+
+        // 音声入力（設定がオフで聞き取り中でもなければ何もしない）
+        if let handled = self.handleVoiceInputKeyEvent(event, client: client) {
+            return handled
         }
 
         // カスタムプロンプトショートカットのチェック
