@@ -7,7 +7,7 @@ struct VoiceRecognitionFailure: Error {
     var failure: VoiceInputSession.Failure
 }
 
-/// SpeechTranscriber（macOS 26 以降の新しい認識）で、マイクの音を認識する 1 回ぶんの聞き取り。
+/// SpeechTranscriber（高精度の認識。macOS 26 以降）で、マイクの音を認識する 1 回ぶんの聞き取り。
 ///
 /// 認識は Mac の中だけで行い、音声は外に送らない（ダウンロードするのは日本語の認識モデルだけ）。
 /// 結果は、まだ変わる部分（volatile）を `.volatileResult`、区切りの確定（finalized）を `.utteranceEnded`、

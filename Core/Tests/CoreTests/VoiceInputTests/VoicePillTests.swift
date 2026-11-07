@@ -197,25 +197,41 @@ struct SpeechTranscriberResultTests {
 
 @Suite("認識の仕組みの設定")
 struct VoiceRecognitionEngineConfigTests {
-    @Test("既定は新しい認識（SpeechTranscriber）")
+    @Test("設定画面の名前は、何ができるかで書き、API の名前を出さない。既定の高精度を先に出す")
+    func displayNames() {
+        #expect(Config.VoiceRecognitionEngine.Value.allCases == [.speechTranscriber, .standard])
+        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.displayName == "高精度（ささやき声も認識・macOS 26 以降）")
+        #expect(Config.VoiceRecognitionEngine.Value.standard.displayName == "互換（macOS 15 以前でも使える）")
+        for engine in Config.VoiceRecognitionEngine.Value.allCases {
+            #expect(!engine.displayName.contains("Speech"))
+        }
+    }
+
+    @Test("保存する値は変えない")
+    func rawValues() {
+        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.rawValue == "speechTranscriber")
+        #expect(Config.VoiceRecognitionEngine.Value.standard.rawValue == "standard")
+    }
+
+    @Test("既定は高精度（SpeechTranscriber）")
     func defaultIsSpeechTranscriber() {
         #expect(Config.VoiceRecognitionEngine.default == .speechTranscriber)
     }
 
-    @Test("既定のままでも、macOS 26 より前では標準を使う")
+    @Test("既定のままでも、macOS 26 より前では互換を使う")
     func defaultFallsBackOnOlderOS() {
         #expect(Config.VoiceRecognitionEngine.default.resolved(speechTranscriberAvailable: false) == .standard)
         #expect(Config.VoiceRecognitionEngine.default.resolved(speechTranscriberAvailable: true) == .speechTranscriber)
     }
 
-    @Test("保存した値の読み書き：標準を選んだ人は標準のまま")
+    @Test("保存した値の読み書き：互換を選んだ人は互換のまま")
     func savedChoiceIsKept() {
         let rawStandard = try? JSONEncoder().encode(Config.VoiceRecognitionEngine.Value.standard)
         let decoded = rawStandard.flatMap { try? JSONDecoder().decode(Config.VoiceRecognitionEngine.Value.self, from: $0) }
         #expect(decoded == .standard)
     }
 
-    @Test("新しい認識が使えない OS では標準を使う")
+    @Test("高精度が使えない OS では互換を使う")
     func resolveOnOlderOS() {
         #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.resolved(speechTranscriberAvailable: false) == .standard)
         #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.resolved(speechTranscriberAvailable: true) == .speechTranscriber)

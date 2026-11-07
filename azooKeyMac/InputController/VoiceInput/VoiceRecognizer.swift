@@ -4,8 +4,8 @@ import Speech
 
 /// マイクの音を日本語のオンデバイス認識にかけ、結果を `VoiceInputSession.Event` として渡す。
 ///
-/// 認識の仕組みは設定で選ぶ。標準は SFSpeechRecognizer（`requiresOnDeviceRecognition`）、
-/// 新しい認識は SpeechTranscriber（macOS 26 以降、`TranscriberRecognition`）。どちらも音声は Mac の外に送らない。
+/// 認識の仕組みは設定で選ぶ。互換は SFSpeechRecognizer（`requiresOnDeviceRecognition`）、
+/// 高精度は SpeechTranscriber（macOS 26 以降、`TranscriberRecognition`）。どちらも音声は Mac の外に送らない。
 /// 入力欄ごとに `azooKeyMacInputController` が作られるが、マイクは 1 つなので全体で 1 つだけ持つ。
 @MainActor
 final class VoiceRecognizer {
@@ -15,7 +15,7 @@ final class VoiceRecognizer {
     /// 認識モデルのダウンロードを始めた（true）・終えた（false）
     typealias PreparingModelHandler = @MainActor (Bool) -> Void
 
-    /// この Mac で新しい認識（SpeechTranscriber）を使えるか
+    /// この Mac で高精度の認識（SpeechTranscriber）を使えるか
     static var isSpeechTranscriberAvailable: Bool {
         if #available(macOS 26.0, *) {
             true
@@ -33,7 +33,7 @@ final class VoiceRecognizer {
     private var task: SFSpeechRecognitionTask?
     private var handler: Handler?
     private var levelHandler: LevelHandler?
-    /// 新しい認識での聞き取り（`TranscriberRecognition`。macOS 26 より前の OS でも持てるように AnyObject にする）
+    /// 高精度の認識での聞き取り（`TranscriberRecognition`。macOS 26 より前の OS でも持てるように AnyObject にする）
     private var transcription: AnyObject?
     /// 始めるたびに増やす。止めたあとに届いた古い結果を捨てるのに使う
     private var generation = 0

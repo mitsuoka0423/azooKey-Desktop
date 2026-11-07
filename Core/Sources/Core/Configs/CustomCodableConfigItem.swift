@@ -175,28 +175,29 @@ extension Config {
 extension Config {
     /// 音声入力の認識の仕組み。どちらも Mac の中だけで認識し、音声は外に送らない
     public struct VoiceRecognitionEngine: CustomCodableConfigItem {
+        /// 保存する値（rawValue）は変えない。並びは設定画面の選択肢の順（既定を先に出す）
         public enum Value: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
-            /// SFSpeechRecognizer（オンデバイス認識）
-            case standard
-            /// SpeechTranscriber（macOS 26 以降の新しい認識）
+            /// 高精度：SpeechTranscriber（macOS 26 以降）
             case speechTranscriber
+            /// 互換：SFSpeechRecognizer（オンデバイス認識）
+            case standard
 
-            /// 設定画面に出す名前
+            /// 設定画面に出す名前。中で使う API の名前ではなく、何ができるかで書く
             public var displayName: String {
                 switch self {
-                case .standard: "標準（SFSpeechRecognizer）"
-                case .speechTranscriber: "新しい認識（SpeechTranscriber、macOS 26 以降）"
+                case .speechTranscriber: "高精度（ささやき声も認識・macOS 26 以降）"
+                case .standard: "互換（macOS 15 以前でも使える）"
                 }
             }
 
-            /// 実際に使う仕組み。新しい認識が使えない OS では標準にする
+            /// 実際に使う仕組み。高精度が使えない OS では互換にする
             public func resolved(speechTranscriberAvailable: Bool) -> Value {
                 self == .speechTranscriber && !speechTranscriberAvailable ? .standard : self
             }
         }
 
         public init() {}
-        /// 既定は新しい認識（ささやき声も拾えたため）。macOS 26 より前では `resolved` で標準になる
+        /// 既定は高精度（ささやき声も拾えたため）。macOS 26 より前では `resolved` で互換になる
         public static let `default`: Value = .speechTranscriber
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.voice_recognition_engine"
     }
