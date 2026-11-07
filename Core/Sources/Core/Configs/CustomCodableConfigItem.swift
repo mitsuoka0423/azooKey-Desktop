@@ -182,11 +182,11 @@ extension Config {
             /// 互換：SFSpeechRecognizer（オンデバイス認識）
             case standard
 
-            /// 設定画面に出す名前。中で使う API の名前ではなく、何ができるかで書く
+            /// 設定画面に出す名前。何ができるかを先に書き、仕組みの名前はかっこの中に残す
             public var displayName: String {
                 switch self {
-                case .speechTranscriber: "高精度（ささやき声も認識・macOS 26 以降）"
-                case .standard: "互換（macOS 15 以前でも使える）"
+                case .speechTranscriber: "高精度（SpeechTranscriber・ささやき声も認識・macOS 26 以降）"
+                case .standard: "互換（SFSpeechRecognizer・macOS 15 以前でも使える）"
                 }
             }
 
