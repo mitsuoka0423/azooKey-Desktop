@@ -12,6 +12,10 @@
 #   NOTARY_KEY_PATH, NOTARY_KEY_ID, NOTARY_ISSUER_ID
 #                        App Store Connect API キー。どれかが空なら公証しない
 #   OUTPUT_PKG           できあがる pkg の場所（既定は build/azooKey-<MARKETING_VERSION>.pkg）
+#   OUTPUT_ZIP           Sparkle で配る .app の zip の場所（既定は build/azooKeyMac-<MARKETING_VERSION>.zip）
+#   SPARKLE_PUBLIC_ED_KEY
+#                        Sparkle の公開鍵（Info.plist の SUPublicEDKey）。空なら、アプリの中からの更新は動かない
+#   SPARKLE_FEED_URL     appcast の URL。空ならプロジェクトの既定（GitHub Releases の最新）を使う
 set -euo pipefail
 
 : "${BUILD_NUMBER:?BUILD_NUMBER を指定してください}"
@@ -27,6 +31,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 BUILD_DIR="${REPO_ROOT}/build/release"
 OUTPUT_PKG="${OUTPUT_PKG:-${REPO_ROOT}/build/azooKey-${MARKETING_VERSION}.pkg}"
+OUTPUT_ZIP="${OUTPUT_ZIP:-${REPO_ROOT}/build/azooKeyMac-${MARKETING_VERSION}.zip}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-}"
+# Sparkle の sign_update などを make_appcast.sh から使えるよう、パッケージの置き場所を決めておく
+SOURCE_PACKAGES_DIR="${REPO_ROOT}/build/SourcePackages"
 ARCHIVE_PATH="${BUILD_DIR}/archive.xcarchive"
 ROOT_DIR="${BUILD_DIR}/root"
 APP_PATH="${ROOT_DIR}/azooKeyMac.app"
@@ -45,17 +54,26 @@ rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}" "${ROOT_DIR}"
 
 # 1. 署名なしで archive する
+SPARKLE_SETTINGS=("SPARKLE_PUBLIC_ED_KEY=${SPARKLE_PUBLIC_ED_KEY}")
+if [ -n "${SPARKLE_FEED_URL}" ]; then
+    SPARKLE_SETTINGS+=("SPARKLE_FEED_URL=${SPARKLE_FEED_URL}")
+fi
+if [ -z "${SPARKLE_PUBLIC_ED_KEY}" ]; then
+    echo "SPARKLE_PUBLIC_ED_KEY がないので、アプリの中からの更新は動きません"
+fi
 xcodebuild \
     -project azooKeyMac.xcodeproj \
     -scheme azooKeyMac \
     -configuration Release \
     -destination "generic/platform=macOS" \
     -archivePath "${ARCHIVE_PATH}" \
+    -clonedSourcePackagesDirPath "${SOURCE_PACKAGES_DIR}" \
     -quiet \
     clean archive \
     CODE_SIGNING_ALLOWED=NO \
     MARKETING_VERSION="${MARKETING_VERSION}" \
-    CURRENT_PROJECT_VERSION="${BUILD_NUMBER}"
+    CURRENT_PROJECT_VERSION="${BUILD_NUMBER}" \
+    "${SPARKLE_SETTINGS[@]}"
 ditto "${ARCHIVE_PATH}/Products/Applications/azooKeyMac.app" "${APP_PATH}"
 
 # 2. entitlements を組み立てる（Xcode が署名のときに足すものも足す）
@@ -72,6 +90,15 @@ sed "s/\$(PRODUCT_BUNDLE_IDENTIFIER)/${BUNDLE_ID}/g" azooKeyMac/azooKeyMac.entit
 
 # 3. 内側から署名する
 cp "${PROVISIONING_PROFILE}" "${APP_PATH}/Contents/embedded.provisionprofile"
+# Sparkle は中の部品から順に署名する（--deep は使わない）。
+# ネットワークの権限があるので、Downloader の XPC サービスは使わずに外す
+SPARKLE_DIR="${APP_PATH}/Contents/Frameworks/Sparkle.framework/Versions/B"
+if [ -d "${SPARKLE_DIR}" ]; then
+    rm -rf "${SPARKLE_DIR}/XPCServices/Downloader.xpc"
+    for item in "XPCServices/Installer.xpc" "Autoupdate" "Updater.app"; do
+        codesign --force --options runtime --timestamp --sign "${APP_SIGN_IDENTITY}" "${SPARKLE_DIR}/${item}"
+    done
+fi
 find "${APP_PATH}/Contents/Frameworks" -depth 1 \( -name "*.framework" -o -name "*.dylib" \) -print0 |
     while IFS= read -r -d '' item; do
         codesign --force --options runtime --timestamp --sign "${APP_SIGN_IDENTITY}" "${item}"
@@ -83,7 +110,12 @@ codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${BUILD_DIR}/azooKeyMac.zip"
 notarize_and_staple "${BUILD_DIR}/azooKeyMac.zip" "${APP_PATH}"
 
-# 5. pkg にまとめる。distribution.xml で入れる先をホームに限っているので、
+# 5. Sparkle で配る zip を作る（チケットを付けたあとのアプリをまとめる）
+mkdir -p "$(dirname "${OUTPUT_ZIP}")"
+rm -f "${OUTPUT_ZIP}"
+ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${OUTPUT_ZIP}"
+
+# 6. pkg にまとめる。distribution.xml で入れる先をホームに限っているので、
 #    install-location の /Library/Input Methods は ~/Library/Input Methods になる
 mkdir -p "${BUILD_DIR}/scripts" "${BUILD_DIR}/packages"
 cp pkg-scripts/postinstall "${BUILD_DIR}/scripts/"
@@ -104,6 +136,7 @@ else
     productbuild --distribution distribution.xml --package-path "${BUILD_DIR}/packages" "${OUTPUT_PKG}"
 fi
 
-# 6. pkg を公証して、チケットを付ける
+# 7. pkg を公証して、チケットを付ける
 notarize_and_staple "${OUTPUT_PKG}" "${OUTPUT_PKG}"
 echo "できあがり：${OUTPUT_PKG}"
+echo "できあがり：${OUTPUT_ZIP}"

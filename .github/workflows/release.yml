@@ -1,5 +1,6 @@
 name: Release
-# main のテストが通ったら、Developer ID で署名・公証した pkg を GitHub Release に置く
+# main のテストが通ったら、Developer ID で署名・公証した pkg と、Sparkle で配る zip と appcast を GitHub Release に置く
+# アプリは releases/latest/download/appcast.xml を読むので、最新の Release の appcast がいつも使われる
 on:
   workflow_run:
     workflows: ["Swift Build and Test"]
@@ -75,12 +76,34 @@ jobs:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
           OUTPUT_PKG: ${{ github.workspace }}/build/azooKey-${{ env.MARKETING_VERSION }}.pkg
+          OUTPUT_ZIP: ${{ github.workspace }}/build/azooKeyMac-${{ env.MARKETING_VERSION }}.zip
+          # Sparkle の公開鍵（秘密ではないのでリポジトリの変数に置く）
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
         run: ./Tools/release_package.sh
+      - name: Make Sparkle appcast
+        # 秘密鍵は標準入力で sign_update に渡す。鍵か公開鍵がまだなければ、appcast を作らずに pkg だけ出す
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ vars.SPARKLE_PUBLIC_ED_KEY }}
+          ZIP_PATH: ${{ github.workspace }}/build/azooKeyMac-${{ env.MARKETING_VERSION }}.zip
+          DOWNLOAD_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ env.MARKETING_VERSION }}/azooKeyMac-${{ env.MARKETING_VERSION }}.zip
+          RELEASE_NOTES_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/v${{ env.MARKETING_VERSION }}
+          OUTPUT_APPCAST: ${{ github.workspace }}/build/appcast.xml
+        run: |
+          if [ -z "$SPARKLE_ED_PRIVATE_KEY" ] || [ -z "$SPARKLE_PUBLIC_ED_KEY" ]; then
+            echo "::warning::SPARKLE_ED_PRIVATE_KEY（Secret）か SPARKLE_PUBLIC_ED_KEY（変数）がないので、appcast を作りません"
+            exit 0
+          fi
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | ./Tools/make_appcast.sh
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v$MARKETING_VERSION" "build/azooKey-$MARKETING_VERSION.pkg" \
+          ASSETS=("build/azooKey-$MARKETING_VERSION.pkg" "build/azooKeyMac-$MARKETING_VERSION.zip")
+          if [ -f build/appcast.xml ]; then
+            ASSETS+=("build/appcast.xml")
+          fi
+          gh release create "v$MARKETING_VERSION" "${ASSETS[@]}" \
             --target "${{ github.event.workflow_run.head_sha }}" \
             --title "azooKey $MARKETING_VERSION" \
             --generate-notes
