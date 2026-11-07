@@ -42,6 +42,12 @@ public struct VoiceTranscript: Sendable, Equatable {
         self.lastEndedUtterance = nil
     }
 
+    /// まだ変わる認識結果を、やり直しの見分けをせずにそのまま今の発話にする
+    public mutating func replaceCurrent(_ text: String) {
+        self.current = text
+        self.lastEndedUtterance = nil
+    }
+
     /// 発話の区切り（その発話の認識結果）を受け取る
     public mutating func endUtterance(_ text: String) {
         let utterance = text.isEmpty ? self.current : text

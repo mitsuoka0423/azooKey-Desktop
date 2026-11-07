@@ -22,6 +22,8 @@ public struct VoiceInputSession: Sendable, Equatable {
         case speechRecognitionDenied
         /// この Mac では日本語のオンデバイス認識が使えない
         case onDeviceRecognitionUnavailable
+        /// 日本語の認識モデルを用意できない（ダウンロード中・ダウンロードに失敗した）
+        case modelUnavailable
         /// そのほかの失敗（録音の開始に失敗した、認識が途中で止まった、など）
         case other(String)
 
@@ -32,7 +34,7 @@ public struct VoiceInputSession: Sendable, Equatable {
                 URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
             case .speechRecognitionDenied:
                 URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
-            case .onDeviceRecognitionUnavailable, .other:
+            case .onDeviceRecognitionUnavailable, .modelUnavailable, .other:
                 nil
             }
         }
@@ -41,8 +43,10 @@ public struct VoiceInputSession: Sendable, Equatable {
     public enum Event: Sendable, Equatable {
         /// 始める・止めるショートカット、またはメニュー
         case toggle
-        /// 途中までの認識結果（今の発話のそれまで全体）
+        /// 途中までの認識結果（今の発話のそれまで全体）。区切りの知らせなしにやり直すことがある（SFSpeechRecognizer）
         case partialResult(String)
+        /// まだ変わる認識結果（区切りの知らせのあとから今までの全体）。やり直しの見分けはしない（SpeechTranscriber）
+        case volatileResult(String)
         /// 話の間で発話が区切られた（その発話の認識結果）。次の結果は新しい発話になる
         case utteranceEnded(String)
         /// 認識の最後の結果（最後の発話の認識結果）
@@ -135,7 +139,7 @@ public struct VoiceInputSession: Sendable, Equatable {
             self.phase = .listening
             self.recognized = VoiceTranscript()
             return Outcome(effects: [.startRecognition], consumesKey: true)
-        case .partialResult, .utteranceEnded, .finalResult, .failed, .finishTimedOut, .enter, .escape, .otherKey, .focusLost:
+        case .partialResult, .volatileResult, .utteranceEnded, .finalResult, .failed, .finishTimedOut, .enter, .escape, .otherKey, .focusLost:
             return .ignored
         }
     }
@@ -147,6 +151,9 @@ public struct VoiceInputSession: Sendable, Equatable {
             return Outcome(effects: [.finishRecognition], consumesKey: true)
         case .partialResult(let text):
             self.recognized.updateCurrent(text)
+            return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
+        case .volatileResult(let text):
+            self.recognized.replaceCurrent(text)
             return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
         case .utteranceEnded(let text):
             self.recognized.endUtterance(text)
@@ -175,6 +182,9 @@ public struct VoiceInputSession: Sendable, Equatable {
             return self.finish(with: self.transcript, extraEffects: [.cancelRecognition], consumesKey: true)
         case .partialResult(let text):
             self.recognized.updateCurrent(text)
+            return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
+        case .volatileResult(let text):
+            self.recognized.replaceCurrent(text)
             return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
         case .utteranceEnded(let text):
             self.recognized.endUtterance(text)

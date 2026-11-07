@@ -162,3 +162,80 @@ struct VoiceLevelTests {
         #expect(heights[0] < heights[1] && heights[2] < heights[1])
     }
 }
+
+@Suite("SpeechTranscriber の結果のつなぎ方")
+struct SpeechTranscriberResultTests {
+    @Test("volatile は今の発話を置き換え、finalized で区切る（実機の SpeechTranscriber が返した順）")
+    func volatileAndFinalized() {
+        var session = VoiceInputSession()
+        _ = session.handle(.toggle)
+        for text in ["今", "今日は", "今日はいい天気ですね。"] {
+            _ = session.handle(.volatileResult(text))
+        }
+        #expect(session.markedText == VoiceInlineText(live: "今日はいい天気ですね。"))
+        _ = session.handle(.utteranceEnded("今日はいい天気ですね。"))
+        _ = session.handle(.volatileResult("明日の会議は 10時からです。"))
+        #expect(session.markedText == VoiceInlineText(settled: "今日はいい天気ですね。", live: "明日の会議は 10時からです。"))
+        _ = session.handle(.utteranceEnded("明日の会議は 10時からです。"))
+        _ = session.handle(.volatileResult("よろしお願い。"))
+        _ = session.handle(.toggle)
+        _ = session.handle(.utteranceEnded("よろしくお願い。"))
+        // 認識が終わると、最後は空の結果で知らせる
+        #expect(session.handle(.finalResult("")).effects == [.commit("今日はいい天気ですね。明日の会議は 10時からです。よろしくお願い。")])
+    }
+
+    @Test("volatile では、先頭が変わって短くなっても新しい発話とみなさない")
+    func volatileDoesNotDetectReset() {
+        var session = VoiceInputSession()
+        _ = session.handle(.toggle)
+        _ = session.handle(.volatileResult("今日はいい天気"))
+        _ = session.handle(.volatileResult("京都"))
+        #expect(session.markedText == VoiceInlineText(live: "京都"))
+    }
+}
+
+@Suite("認識の仕組みの設定")
+struct VoiceRecognitionEngineConfigTests {
+    @Test("既定は標準")
+    func defaultIsStandard() {
+        #expect(Config.VoiceRecognitionEngine.default == .standard)
+    }
+
+    @Test("新しい認識が使えない OS では標準を使う")
+    func resolveOnOlderOS() {
+        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.resolved(speechTranscriberAvailable: false) == .standard)
+        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.resolved(speechTranscriberAvailable: true) == .speechTranscriber)
+        #expect(Config.VoiceRecognitionEngine.Value.standard.resolved(speechTranscriberAvailable: true) == .standard)
+    }
+}
+
+@Suite("認識モデルの準備")
+struct VoicePillModelPreparationTests {
+    private let shortcut = KeyboardShortcut.defaultVoiceInputShortcut
+
+    @Test("モデルをダウンロードしているあいだは「準備中…」を出し、止め方は出さない")
+    func preparing() {
+        var presenter = VoicePillPresenter()
+        presenter.start(at: 0)
+        presenter.setPreparingModel(true, at: 0)
+        let model = presenter.model(phase: .listening, now: 10, shortcut: self.shortcut, reduceMotion: false)
+        #expect(model == VoicePillModel(mic: .finishing, label: "日本語の認識モデルを準備中…", isPulsing: false, level: nil, animatesLevel: false, keys: nil))
+    }
+
+    @Test("準備が終わったら聞き取り中に戻り、声がない時間はそこから数える")
+    func preparedThenListening() {
+        var presenter = VoicePillPresenter()
+        presenter.start(at: 0)
+        presenter.setPreparingModel(true, at: 0)
+        presenter.setPreparingModel(false, at: 10)
+        let model = presenter.model(phase: .listening, now: 11, shortcut: self.shortcut, reduceMotion: false)
+        #expect(model?.label == "聞き取り中")
+        #expect(model?.keys == nil)
+    }
+
+    @Test("モデルを用意できないときの文言")
+    func modelUnavailableMessage() {
+        #expect(VoicePillPresenter.message(for: .modelUnavailable) == "日本語の認識モデルを準備できません")
+        #expect(VoiceInputSession.Failure.modelUnavailable.privacySettingsURL == nil)
+    }
+}

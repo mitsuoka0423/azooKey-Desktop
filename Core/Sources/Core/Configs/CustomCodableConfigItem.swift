@@ -173,6 +173,35 @@ extension Config {
 }
 
 extension Config {
+    /// 音声入力の認識の仕組み。どちらも Mac の中だけで認識し、音声は外に送らない
+    public struct VoiceRecognitionEngine: CustomCodableConfigItem {
+        public enum Value: String, Codable, Equatable, Hashable, Sendable, CaseIterable {
+            /// SFSpeechRecognizer（オンデバイス認識）
+            case standard
+            /// SpeechTranscriber（macOS 26 以降の新しい認識）
+            case speechTranscriber
+
+            /// 設定画面に出す名前
+            public var displayName: String {
+                switch self {
+                case .standard: "標準（SFSpeechRecognizer）"
+                case .speechTranscriber: "新しい認識（SpeechTranscriber、macOS 26 以降）"
+                }
+            }
+
+            /// 実際に使う仕組み。新しい認識が使えない OS では標準にする
+            public func resolved(speechTranscriberAvailable: Bool) -> Value {
+                self == .speechTranscriber && !speechTranscriberAvailable ? .standard : self
+            }
+        }
+
+        public init() {}
+        public static let `default`: Value = .standard
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.voice_recognition_engine"
+    }
+}
+
+extension Config {
     /// キーボードレイアウトの設定
     public struct KeyboardLayout: CustomCodableConfigItem {
         public enum Value: String, Codable, Equatable, Hashable, Sendable {

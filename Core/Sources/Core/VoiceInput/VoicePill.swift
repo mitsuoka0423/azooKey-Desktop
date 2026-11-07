@@ -58,6 +58,8 @@ public struct VoicePillPresenter: Sendable, Equatable {
     private var lastVoiceAt: TimeInterval?
     private var level: Double = 0
     private var failure: (message: String, at: TimeInterval)?
+    /// 認識モデルをダウンロードしている
+    private var isPreparingModel = false
 
     public init() {}
 
@@ -67,6 +69,15 @@ public struct VoicePillPresenter: Sendable, Equatable {
         self.lastVoiceAt = nil
         self.level = 0
         self.failure = nil
+        self.isPreparingModel = false
+    }
+
+    /// 認識モデルのダウンロードを始めた・終えた。終えたら、声がない時間はそこから数える
+    public mutating func setPreparingModel(_ preparing: Bool, at time: TimeInterval) {
+        if self.isPreparingModel, !preparing {
+            self.listeningStartedAt = time
+        }
+        self.isPreparingModel = preparing
     }
 
     /// 録音中の音の大きさ（0〜1）を受け取る
@@ -87,6 +98,7 @@ public struct VoicePillPresenter: Sendable, Equatable {
         self.listeningStartedAt = nil
         self.lastVoiceAt = nil
         self.level = 0
+        self.isPreparingModel = false
     }
 
     /// 失敗した
@@ -110,6 +122,8 @@ public struct VoicePillPresenter: Sendable, Equatable {
         reduceMotion: Bool
     ) -> VoicePillModel? {
         switch phase {
+        case .listening where self.isPreparingModel:
+            return VoicePillModel(mic: .finishing, label: "日本語の認識モデルを準備中…", isPulsing: false, level: nil, animatesLevel: false, keys: nil)
         case .listening:
             let quietSince = self.lastVoiceAt ?? self.listeningStartedAt ?? now
             let showsKeys = now - quietSince >= Self.silenceBeforeKeys
@@ -146,6 +160,8 @@ public struct VoicePillPresenter: Sendable, Equatable {
             "音声認識が許可されていません"
         case .onDeviceRecognitionUnavailable:
             "この Mac では音声認識を使えません"
+        case .modelUnavailable:
+            "日本語の認識モデルを準備できません"
         case .other:
             "うまく聞き取れませんでした"
         }
@@ -157,6 +173,7 @@ public struct VoicePillPresenter: Sendable, Equatable {
             && lhs.level == rhs.level
             && lhs.failure?.message == rhs.failure?.message
             && lhs.failure?.at == rhs.failure?.at
+            && lhs.isPreparingModel == rhs.isPreparingModel
     }
 }
 
