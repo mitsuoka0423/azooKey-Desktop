@@ -267,8 +267,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     }
 
     override func menu() -> NSMenu! {
-        self.updateVoiceInputMenuItem()
-        return self.appMenu
+        self.appMenu
     }
 
     // swiftlint:disable:next cyclomatic_complexity

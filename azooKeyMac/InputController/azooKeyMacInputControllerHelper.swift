@@ -13,7 +13,7 @@ extension azooKeyMacInputController {
         self.transformSelectedTextMenuItem.keyEquivalentModifierMask = [.control]
         self.transformSelectedTextMenuItem.target = self
         self.appMenu.addItem(self.transformSelectedTextMenuItem)
-        self.voiceInputMenuItem = NSMenuItem(title: "音声入力を開始", action: #selector(self.toggleVoiceInput(_:)), keyEquivalent: "")
+        self.voiceInputMenuItem = NSMenuItem(title: "音声入力を開始・停止", action: #selector(self.toggleVoiceInput(_:)), keyEquivalent: "")
         self.voiceInputMenuItem.target = self
         self.appMenu.addItem(self.voiceInputMenuItem)
         self.updateVoiceInputMenuItem()

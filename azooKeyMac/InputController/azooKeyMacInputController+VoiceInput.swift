@@ -7,11 +7,6 @@ extension azooKeyMacInputController {
     /// 止めてから最後の結果を待つ長さ
     private static let voiceInputFinishTimeout: TimeInterval = 3
 
-    private enum VoiceInputMenuTitle {
-        static let start = "音声入力を開始"
-        static let stop = "音声入力を止める"
-    }
-
     // MARK: - キー入力
 
     /// 音声入力がキーを受け持ったら `true` を返す。`nil` ならふだんのキー処理に回す
@@ -54,15 +49,18 @@ extension azooKeyMacInputController {
         } else if Config.VoiceInput().value {
             self.startVoiceInput(client: client)
         }
-        self.updateVoiceInputMenuItem()
     }
 
+    /// 設定に合わせてメニュー項目を出し入れする。
+    ///
+    /// メニューを書き換えると IMK が入力先を一度 deactivate するので、打鍵や聞き取りのたびには呼ばない。
+    /// 値が変わったときだけ書き換え、タイトルやキー表示も固定にしている
+    /// （ショートカットの判定は `handleVoiceInputKeyEvent` が行う）。
     func updateVoiceInputMenuItem() {
-        let shortcut = Config.VoiceInputShortcut().value
-        self.voiceInputMenuItem.isHidden = !Config.VoiceInput().value
-        self.voiceInputMenuItem.title = self.voiceInputSession.isActive ? VoiceInputMenuTitle.stop : VoiceInputMenuTitle.start
-        self.voiceInputMenuItem.keyEquivalent = shortcut.key
-        self.voiceInputMenuItem.keyEquivalentModifierMask = NSEvent.ModifierFlags(shortcut.modifiers)
+        let hidden = !Config.VoiceInput().value
+        if self.voiceInputMenuItem.isHidden != hidden {
+            self.voiceInputMenuItem.isHidden = hidden
+        }
     }
 
     // MARK: - フォーカスが外れたとき
@@ -79,7 +77,6 @@ extension azooKeyMacInputController {
         } else {
             VoiceRecognizer.shared.cancel()
         }
-        self.updateVoiceInputMenuItem()
     }
 
     // MARK: - 中身
@@ -139,7 +136,6 @@ extension azooKeyMacInputController {
                 }
             }
         }
-        self.updateVoiceInputMenuItem()
     }
 
     private func setVoiceInputMarkedText(_ text: String, client: IMKTextInput) {
@@ -152,23 +148,5 @@ extension azooKeyMacInputController {
             selectionRange: NSRange(location: text.utf16.count, length: 0),
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
-    }
-}
-
-private extension NSEvent.ModifierFlags {
-    init(_ modifiers: KeyEventCore.ModifierFlag) {
-        self = []
-        if modifiers.contains(.control) {
-            self.insert(.control)
-        }
-        if modifiers.contains(.option) {
-            self.insert(.option)
-        }
-        if modifiers.contains(.shift) {
-            self.insert(.shift)
-        }
-        if modifiers.contains(.command) {
-            self.insert(.command)
-        }
     }
 }
