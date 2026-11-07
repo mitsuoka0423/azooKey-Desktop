@@ -41,9 +41,11 @@ public struct VoiceInputSession: Sendable, Equatable {
     public enum Event: Sendable, Equatable {
         /// 始める・止めるショートカット、またはメニュー
         case toggle
-        /// 途中までの認識結果（それまでに話した全体）
+        /// 途中までの認識結果（今の発話のそれまで全体）
         case partialResult(String)
-        /// 認識の最後の結果
+        /// 話の間で発話が区切られた（その発話の認識結果）。次の結果は新しい発話になる
+        case utteranceEnded(String)
+        /// 認識の最後の結果（最後の発話の認識結果）
         case finalResult(String)
         /// 認識できなかった・止まった
         case failed(Failure)
@@ -93,8 +95,13 @@ public struct VoiceInputSession: Sendable, Equatable {
     public static let listeningPlaceholder = "🎤"
 
     public private(set) var phase: Phase = .idle
+    /// それまでに認識した文字（発話ごとの結果をつないだもの）
+    public private(set) var recognized = VoiceTranscript()
+
     /// それまでに認識した文字
-    public private(set) var transcript: String = ""
+    public var transcript: String {
+        self.recognized.text
+    }
 
     public init() {}
 
@@ -128,9 +135,9 @@ public struct VoiceInputSession: Sendable, Equatable {
         switch event {
         case .toggle:
             self.phase = .listening
-            self.transcript = ""
+            self.recognized = VoiceTranscript()
             return Outcome(effects: [.startRecognition, .setMarkedText(self.markedText)], consumesKey: true)
-        case .partialResult, .finalResult, .failed, .finishTimedOut, .enter, .escape, .otherKey, .focusLost:
+        case .partialResult, .utteranceEnded, .finalResult, .failed, .finishTimedOut, .enter, .escape, .otherKey, .focusLost:
             return .ignored
         }
     }
@@ -141,11 +148,14 @@ public struct VoiceInputSession: Sendable, Equatable {
             self.phase = .finishing
             return Outcome(effects: [.finishRecognition], consumesKey: true)
         case .partialResult(let text):
-            self.transcript = text
+            self.recognized.updateCurrent(text)
+            return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
+        case .utteranceEnded(let text):
+            self.recognized.endUtterance(text)
             return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
         case .finalResult(let text):
             // 話し終わりを認識側が判断して止まった
-            return self.finish(with: text, extraEffects: [], consumesKey: false)
+            return self.finish(with: self.recognized.finalText(text), extraEffects: [], consumesKey: false)
         case .failed(let failure):
             return self.finish(with: self.transcript, extraEffects: [.cancelRecognition], trailingEffects: [.report(failure)], consumesKey: false)
         case .finishTimedOut:
@@ -166,10 +176,13 @@ public struct VoiceInputSession: Sendable, Equatable {
             // 最後の結果を待たずに、ここまでの文字で確定する
             return self.finish(with: self.transcript, extraEffects: [.cancelRecognition], consumesKey: true)
         case .partialResult(let text):
-            self.transcript = text
+            self.recognized.updateCurrent(text)
+            return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
+        case .utteranceEnded(let text):
+            self.recognized.endUtterance(text)
             return Outcome(effects: [.setMarkedText(self.markedText)], consumesKey: false)
         case .finalResult(let text):
-            return self.finish(with: text, extraEffects: [], consumesKey: false)
+            return self.finish(with: self.recognized.finalText(text), extraEffects: [], consumesKey: false)
         case .failed(let failure):
             return self.finish(with: self.transcript, extraEffects: [.cancelRecognition], trailingEffects: [.report(failure)], consumesKey: false)
         case .finishTimedOut, .focusLost:
@@ -183,14 +196,14 @@ public struct VoiceInputSession: Sendable, Equatable {
 
     private mutating func finish(with text: String, extraEffects: [Effect], trailingEffects: [Effect] = [], consumesKey: Bool) -> Outcome {
         self.phase = .idle
-        self.transcript = ""
+        self.recognized = VoiceTranscript()
         let commitEffect: Effect = text.isEmpty ? .clearMarkedText : .commit(text)
         return Outcome(effects: extraEffects + [commitEffect] + trailingEffects, consumesKey: consumesKey)
     }
 
     private mutating func discard() -> Outcome {
         self.phase = .idle
-        self.transcript = ""
+        self.recognized = VoiceTranscript()
         return Outcome(effects: [.cancelRecognition, .clearMarkedText], consumesKey: true)
     }
 }

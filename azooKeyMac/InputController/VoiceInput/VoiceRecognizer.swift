@@ -124,8 +124,8 @@ final class VoiceRecognizer {
 
         self.audioEngine = audioEngine
         self.request = request
-        self.task = recognizer.recognitionTask(with: request, resultHandler: Self.makeResultHandler { [weak self] text, isFinal, errorMessage in
-            self?.handleResult(text: text, isFinal: isFinal, errorMessage: errorMessage, generation: generation)
+        self.task = recognizer.recognitionTask(with: request, resultHandler: Self.makeResultHandler { [weak self] result in
+            self?.handleResult(result, generation: generation)
         })
     }
 
@@ -136,32 +136,44 @@ final class VoiceRecognizer {
         }
     }
 
-    /// 認識の結果は任意のスレッドで届くので、文字だけ取り出して MainActor に戻す
+    /// 認識の結果から取り出したもの
+    private struct ResultSummary: Sendable {
+        var text: String?
+        var isFinal: Bool
+        /// 話の間で発話が区切られた（オンデバイス認識は、次の結果を最初からやり直す）
+        var endsUtterance: Bool
+        var errorMessage: String?
+    }
+
+    /// 認識の結果は任意のスレッドで届くので、要るものだけ取り出して MainActor に戻す
     nonisolated private static func makeResultHandler(
-        _ deliver: @escaping @MainActor (_ text: String?, _ isFinal: Bool, _ errorMessage: String?) -> Void
+        _ deliver: @escaping @MainActor (ResultSummary) -> Void
     ) -> (SFSpeechRecognitionResult?, Error?) -> Void {
         { result, error in
-            let text = result?.bestTranscription.formattedString
-            let isFinal = result?.isFinal ?? false
-            let errorMessage = error?.localizedDescription
+            let summary = ResultSummary(
+                text: result?.bestTranscription.formattedString,
+                isFinal: result?.isFinal ?? false,
+                endsUtterance: result?.speechRecognitionMetadata != nil,
+                errorMessage: error?.localizedDescription
+            )
             Task { @MainActor in
-                deliver(text, isFinal, errorMessage)
+                deliver(summary)
             }
         }
     }
 
-    private func handleResult(text: String?, isFinal: Bool, errorMessage: String?, generation: Int) {
+    private func handleResult(_ result: ResultSummary, generation: Int) {
         guard generation == self.generation else {
             return
         }
-        if let text, isFinal {
+        if let text = result.text, result.isFinal {
             self.tearDown()
             self.deliver(.finalResult(text), generation: generation)
-        } else if let errorMessage {
+        } else if let errorMessage = result.errorMessage {
             self.tearDown()
             self.deliver(.failed(.other(errorMessage)), generation: generation)
-        } else if let text {
-            self.deliver(.partialResult(text), generation: generation)
+        } else if let text = result.text {
+            self.deliver(result.endsUtterance ? .utteranceEnded(text) : .partialResult(text), generation: generation)
         }
     }
 

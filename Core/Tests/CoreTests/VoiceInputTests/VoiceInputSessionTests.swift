@@ -186,3 +186,121 @@ struct VoiceInputConfigTests {
         #expect(!shortcut.matches(charactersIgnoringModifiers: "", modifiers: [.control, .shift]))
     }
 }
+
+@Suite("VoiceTranscript")
+struct VoiceTranscriptTests {
+    @Test("1 つの発話が伸びていくときは、今の発話を置き換えるだけ")
+    func growingUtterance() {
+        var transcript = VoiceTranscript()
+        for text in ["今", "今日", "今日は", "今日ははい", "今日はいい", "今日はいい天気ですね"] {
+            transcript.updateCurrent(text)
+        }
+        #expect(transcript.text == "今日はいい天気ですね")
+        #expect(transcript.confirmed.isEmpty)
+    }
+
+    @Test("話の間で区切られたら、それまでの発話を残して次の発話をつなぐ")
+    func utteranceEndKeepsPreviousText() {
+        // 実機の SFSpeechRecognizer（ja-JP・オンデバイス）が無音 3 秒を挟んだ音声で返した順
+        var transcript = VoiceTranscript()
+        transcript.updateCurrent("今日はいい天気ですね")
+        transcript.endUtterance("今日はいい天気ですね")
+        #expect(transcript.text == "今日はいい天気ですね")
+        transcript.updateCurrent("明")
+        #expect(transcript.text == "今日はいい天気ですね明")
+        transcript.updateCurrent("明日の会議は10時からです")
+        transcript.endUtterance("明日の会議は10時からです")
+        transcript.updateCurrent("よろしくお願いしま")
+        #expect(transcript.finalText("よろしくお願いします") == "今日はいい天気ですね明日の会議は10時からですよろしくお願いします")
+    }
+
+    @Test("最後の結果が、区切られた発話と同じ文を繰り返しても二重にしない")
+    func finalRepeatingEndedUtterance() {
+        var transcript = VoiceTranscript()
+        transcript.endUtterance("こんにちは")
+        transcript.endUtterance("元気ですか？")
+        #expect(transcript.finalText("元気ですか？") == "こんにちは元気ですか？")
+    }
+
+    @Test("同じ文でも、区切りのあとに新しく話した発話なら二重にする")
+    func repeatedSentenceAfterNewSpeech() {
+        var transcript = VoiceTranscript()
+        transcript.endUtterance("はい")
+        transcript.updateCurrent("は")
+        #expect(transcript.finalText("はい") == "はいはい")
+    }
+
+    @Test("最後の結果が空なら、ここまでの文字を使う")
+    func emptyFinal() {
+        var transcript = VoiceTranscript()
+        transcript.endUtterance("こんにちは")
+        transcript.updateCurrent("元気")
+        #expect(transcript.finalText("") == "こんにちは元気")
+    }
+
+    @Test("区切りの知らせがなくても、先頭が変わって短くなったら新しい発話とみなす")
+    func resetWithoutUtteranceEnd() {
+        var transcript = VoiceTranscript()
+        transcript.updateCurrent("今日はいい天気ですね")
+        transcript.updateCurrent("明日")
+        #expect(transcript.confirmed == "今日はいい天気ですね")
+        #expect(transcript.text == "今日はいい天気ですね明日")
+    }
+
+    @Test("前のほうの言葉が直されただけなら、新しい発話とはみなさない")
+    func revisionIsNotReset() {
+        #expect(!VoiceTranscript.isNewUtterance(previous: "今日ははい", next: "今日はいい"))
+        #expect(!VoiceTranscript.isNewUtterance(previous: "明日の会議は10時か", next: "明日の会議は、10時から"))
+        // 先頭が変わっても、長くなっていれば同じ発話の言い直しとみなす
+        #expect(!VoiceTranscript.isNewUtterance(previous: "今日は", next: "京都はいい天気"))
+        #expect(VoiceTranscript.isNewUtterance(previous: "今日はいい天気", next: "明日"))
+        #expect(!VoiceTranscript.isNewUtterance(previous: "", next: "明日"))
+    }
+
+    @Test("英数字どうしが続くときだけ空白を入れる")
+    func joinRule() {
+        #expect(VoiceTranscript.join("Swift", "UI") == "Swift UI")
+        #expect(VoiceTranscript.join("10", "時") == "10時")
+        #expect(VoiceTranscript.join("です。", "OK") == "です。OK")
+        #expect(VoiceTranscript.join("", "OK") == "OK")
+    }
+}
+
+@Suite("VoiceInputSession（発話の区切り）")
+struct VoiceInputSessionUtteranceTests {
+    @Test("聞き取り中に話の間があっても、前の文が消えない")
+    func pauseKeepsEarlierText() {
+        var session = VoiceInputSession()
+        _ = session.handle(.toggle)
+        _ = session.handle(.partialResult("今日はいい天気ですね"))
+        #expect(session.handle(.utteranceEnded("今日はいい天気ですね")).effects == [.setMarkedText("今日はいい天気ですね")])
+        #expect(session.handle(.partialResult("明日")).effects == [.setMarkedText("今日はいい天気ですね明日")])
+        _ = session.handle(.toggle)
+        #expect(session.handle(.finalResult("明日の会議です")).effects == [.commit("今日はいい天気ですね明日の会議です")])
+    }
+
+    @Test("止めたあとの最後の結果が、区切られた発話の繰り返しなら二重にしない")
+    func finalAfterUtteranceEnd() {
+        var session = VoiceInputSession()
+        _ = session.handle(.toggle)
+        _ = session.handle(.utteranceEnded("こんにちは"))
+        _ = session.handle(.utteranceEnded("元気ですか？"))
+        _ = session.handle(.toggle)
+        #expect(session.handle(.finalResult("元気ですか？")).effects == [.commit("こんにちは元気ですか？")])
+    }
+
+    @Test("ほかのキーで打ち切ったときも、区切られた発話をすべて確定する")
+    func otherKeyCommitsAllUtterances() {
+        var session = VoiceInputSession()
+        _ = session.handle(.toggle)
+        _ = session.handle(.utteranceEnded("こんにちは"))
+        _ = session.handle(.partialResult("元気"))
+        #expect(session.handle(.otherKey).effects == [.cancelRecognition, .commit("こんにちは元気")])
+    }
+
+    @Test("待機中は区切りの知らせを無視する")
+    func idleIgnoresUtteranceEnd() {
+        var session = VoiceInputSession()
+        #expect(session.handle(.utteranceEnded("こんにちは")).effects.isEmpty)
+    }
+}
