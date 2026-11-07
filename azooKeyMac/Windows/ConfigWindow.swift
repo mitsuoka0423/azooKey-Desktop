@@ -43,6 +43,7 @@ struct ConfigWindow: View {
     @State private var debugTypoCorrectionState: DebugTypoCorrectionState = .notDownloaded
     @State private var debugTypoCorrectionDownloadInProgress = false
     @State private var debugTypoCorrectionErrorMessage: String?
+    @State private var automaticallyChecksForUpdates = false
 
     private enum Tab: String, CaseIterable, Hashable {
         case basic = "基本"
@@ -747,6 +748,33 @@ struct ConfigWindow: View {
                 }
             } header: {
                 Label("開発者向け設定", systemImage: "hammer")
+            }
+
+            Section {
+                Toggle("アップデートを自動で確認", isOn: Binding(
+                    get: { self.automaticallyChecksForUpdates },
+                    set: {
+                        self.automaticallyChecksForUpdates = $0
+                        SoftwareUpdater.shared.automaticallyChecksForUpdates = $0
+                    }
+                ))
+                .disabled(!SoftwareUpdater.shared.isAvailable)
+                LabeledContent("新しい版") {
+                    Button("アップデートを確認…") {
+                        SoftwareUpdater.shared.checkForUpdates()
+                    }
+                    .disabled(!SoftwareUpdater.shared.isAvailable)
+                }
+                if !SoftwareUpdater.shared.isAvailable {
+                    Text("このビルドでは、アプリの中からのアップデートを使えません。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Label("アップデート", systemImage: "arrow.down.circle")
+            }
+            .onAppear {
+                self.automaticallyChecksForUpdates = SoftwareUpdater.shared.automaticallyChecksForUpdates
             }
 
             Section {

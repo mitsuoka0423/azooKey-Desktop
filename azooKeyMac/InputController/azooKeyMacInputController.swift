@@ -16,6 +16,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var liveConversionToggleMenuItem: NSMenuItem
     var transformSelectedTextMenuItem: NSMenuItem
     var voiceInputMenuItem: NSMenuItem
+    var softwareUpdateMenuItem: NSMenuItem
 
     /// 音声入力の状態（状態の変化は Core の VoiceInputSession が決める）
     var voiceInputSession = VoiceInputSession()
@@ -132,6 +133,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.liveConversionToggleMenuItem = NSMenuItem()
         self.transformSelectedTextMenuItem = NSMenuItem()
         self.voiceInputMenuItem = NSMenuItem()
+        self.softwareUpdateMenuItem = NSMenuItem()
 
         let candidatesViewController = CandidatesViewController()
         let predictionViewController = PredictionCandidatesViewController()
@@ -168,6 +170,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.updateLiveConversionToggleMenuItem(newValue: self.liveConversionEnabled)
         self.updateTransformSelectedTextMenuItemEnabledState()
         self.updateVoiceInputMenuItem()
+        self.updateSoftwareUpdateMenuItem()
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()

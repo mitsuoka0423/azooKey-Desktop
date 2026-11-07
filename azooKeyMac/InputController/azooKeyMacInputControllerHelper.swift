@@ -17,6 +17,10 @@ extension azooKeyMacInputController {
         self.voiceInputMenuItem.target = self
         self.updateVoiceInputMenuItem()
         self.appMenu.addItem(NSMenuItem.separator())
+        // 項目はいつも入れておき、題だけを activateServer で変える（menu() や打鍵の中では書き換えない）
+        self.softwareUpdateMenuItem = NSMenuItem(title: "アップデートを確認…", action: #selector(self.checkForSoftwareUpdates(_:)), keyEquivalent: "")
+        self.softwareUpdateMenuItem.target = self
+        self.appMenu.addItem(self.softwareUpdateMenuItem)
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))
         self.appMenu.addItem(NSMenuItem(title: "View on GitHub…", action: #selector(self.openGitHubRepository(_:)), keyEquivalent: ""))
         self.updateTransformSelectedTextMenuItemEnabledState()
@@ -67,6 +71,9 @@ extension azooKeyMacInputController {
     }
 
     @MainActor @objc func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem == self.softwareUpdateMenuItem {
+            return SoftwareUpdater.shared.isAvailable
+        }
         guard menuItem == self.transformSelectedTextMenuItem else {
             return true
         }
@@ -104,6 +111,17 @@ extension azooKeyMacInputController {
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    /// 入力メニューの「アップデートを確認…」の題と、押せるかどうかを今の状態に合わせる
+    @MainActor func updateSoftwareUpdateMenuItem() {
+        let item = SoftwareUpdateMenuItem.make(for: SoftwareUpdater.shared.state)
+        self.softwareUpdateMenuItem.title = item.title
+        self.softwareUpdateMenuItem.isEnabled = item.isEnabled
+    }
+
+    @MainActor @objc func checkForSoftwareUpdates(_ sender: Any) {
+        SoftwareUpdater.shared.checkForUpdates()
     }
 
     @objc func openConfigWindow(_ sender: Any) {

@@ -145,6 +145,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await Config.OpenAiApiKey.loadFromKeychain()
         }
         self.exportInitialUserDictionaryIfNeeded()
+        SoftwareUpdater.shared.start()
 
         // Check if mainMenu exists, or create it
         if NSApp.mainMenu == nil {
