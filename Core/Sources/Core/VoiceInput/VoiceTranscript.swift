@@ -25,6 +25,13 @@ public struct VoiceTranscript: Sendable, Equatable {
         self.text.isEmpty
     }
 
+    /// 本文に出すときの分け方。区切られた発話は固まった部分、今の発話はまだ変わる部分
+    public var inlineText: VoiceInlineText {
+        let text = self.text
+        let settled = self.confirmed
+        return VoiceInlineText(settled: settled, live: String(text.dropFirst(settled.count)))
+    }
+
     /// 途中の認識結果（今の発話のそれまで全体）を受け取る
     public mutating func updateCurrent(_ text: String) {
         if Self.isNewUtterance(previous: self.current, next: text) {

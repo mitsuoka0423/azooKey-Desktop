@@ -68,8 +68,8 @@ public struct VoiceInputSession: Sendable, Equatable {
         case finishRecognition
         /// 録音と認識を捨てる
         case cancelRecognition
-        /// 未確定文字列を置き換える
-        case setMarkedText(String)
+        /// 未確定文字列を置き換える（固まった部分と、まだ変わる部分に分けて渡す）
+        case setMarkedText(VoiceInlineText)
         /// 未確定文字列を消す
         case clearMarkedText
         /// 文字を確定する（未確定文字列はこの文字で置き換わる）
@@ -91,9 +91,6 @@ public struct VoiceInputSession: Sendable, Equatable {
         static let ignored = Outcome(effects: [], consumesKey: false)
     }
 
-    /// 聞き取り中で、まだ何も認識していないときに見せる未確定文字列
-    public static let listeningPlaceholder = "🎤"
-
     public private(set) var phase: Phase = .idle
     /// それまでに認識した文字（発話ごとの結果をつないだもの）
     public private(set) var recognized = VoiceTranscript()
@@ -110,13 +107,14 @@ public struct VoiceInputSession: Sendable, Equatable {
         self.phase != .idle
     }
 
-    /// 今見せる未確定文字列
-    public var markedText: String {
+    /// 今見せる未確定文字列。まだ何も認識していないあいだは空にして、本文には何も入れない
+    /// （聞き取り中であることは、聞き取りピルで見せる）
+    public var markedText: VoiceInlineText {
         switch self.phase {
         case .idle:
-            ""
+            VoiceInlineText()
         case .listening, .finishing:
-            self.transcript.isEmpty ? Self.listeningPlaceholder : self.transcript
+            self.recognized.inlineText
         }
     }
 
@@ -136,7 +134,7 @@ public struct VoiceInputSession: Sendable, Equatable {
         case .toggle:
             self.phase = .listening
             self.recognized = VoiceTranscript()
-            return Outcome(effects: [.startRecognition, .setMarkedText(self.markedText)], consumesKey: true)
+            return Outcome(effects: [.startRecognition], consumesKey: true)
         case .partialResult, .utteranceEnded, .finalResult, .failed, .finishTimedOut, .enter, .escape, .otherKey, .focusLost:
             return .ignored
         }

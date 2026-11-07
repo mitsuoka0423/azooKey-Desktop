@@ -13,12 +13,13 @@ struct VoiceInputSessionTests {
         return session
     }
 
-    @Test("待機中にショートカットを押すと聞き取りを始め、目印を未確定文字列に出す")
+    @Test("待機中にショートカットを押すと聞き取りを始める。本文には何も入れない")
     func toggleStartsListening() {
         var session = VoiceInputSession()
         let outcome = session.handle(.toggle)
         #expect(session.phase == .listening)
-        #expect(outcome.effects == [.startRecognition, .setMarkedText(VoiceInputSession.listeningPlaceholder)])
+        #expect(outcome.effects == [.startRecognition])
+        #expect(session.markedText.isEmpty)
         #expect(outcome.consumesKey)
     }
 
@@ -37,11 +38,11 @@ struct VoiceInputSessionTests {
     func partialResultUpdatesMarkedText() {
         var session = self.listeningSession()
         let outcome = session.handle(.partialResult("今日は"))
-        #expect(outcome.effects == [.setMarkedText("今日は")])
+        #expect(outcome.effects == [.setMarkedText(VoiceInlineText(live: "今日は"))])
         #expect(session.transcript == "今日は")
-        #expect(session.markedText == "今日は")
+        #expect(session.markedText.text == "今日は")
         _ = session.handle(.partialResult("今日はいい天気"))
-        #expect(session.markedText == "今日はいい天気")
+        #expect(session.markedText.text == "今日はいい天気")
     }
 
     @Test("もう一度ショートカットを押すと、最後の結果を待ってから確定する")
@@ -51,7 +52,7 @@ struct VoiceInputSessionTests {
         #expect(stop.effects == [.finishRecognition])
         #expect(stop.consumesKey)
         #expect(session.phase == .finishing)
-        #expect(session.markedText == "今日はいい天気")
+        #expect(session.markedText.text == "今日はいい天気")
 
         let final = session.handle(.finalResult("今日はいい天気です"))
         #expect(final.effects == [.commit("今日はいい天気です")])
@@ -273,8 +274,8 @@ struct VoiceInputSessionUtteranceTests {
         var session = VoiceInputSession()
         _ = session.handle(.toggle)
         _ = session.handle(.partialResult("今日はいい天気ですね"))
-        #expect(session.handle(.utteranceEnded("今日はいい天気ですね")).effects == [.setMarkedText("今日はいい天気ですね")])
-        #expect(session.handle(.partialResult("明日")).effects == [.setMarkedText("今日はいい天気ですね明日")])
+        #expect(session.handle(.utteranceEnded("今日はいい天気ですね")).effects == [.setMarkedText(VoiceInlineText(settled: "今日はいい天気ですね"))])
+        #expect(session.handle(.partialResult("明日")).effects == [.setMarkedText(VoiceInlineText(settled: "今日はいい天気ですね", live: "明日"))])
         _ = session.handle(.toggle)
         #expect(session.handle(.finalResult("明日の会議です")).effects == [.commit("今日はいい天気ですね明日の会議です")])
     }
