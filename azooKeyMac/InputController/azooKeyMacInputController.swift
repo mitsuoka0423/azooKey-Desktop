@@ -21,6 +21,11 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
     var voiceInputSession = VoiceInputSession()
     /// 止めたあとの時間切れを、いちばん新しいものだけ効かせるための番号
     var voiceInputFinishToken = 0
+    /// 聞き取りピル（状態の決め方は Core の VoicePillPresenter）
+    let voicePillWindow = VoicePillWindow()
+    var voicePillPresenter = VoicePillPresenter()
+    var voicePillAnchor: NSRect = .zero
+    var voicePillTimer: Timer?
 
     private var candidatesWindow: NSWindow
     private var candidatesViewController: CandidatesViewController

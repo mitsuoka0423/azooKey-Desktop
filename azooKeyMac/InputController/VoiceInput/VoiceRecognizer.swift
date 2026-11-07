@@ -9,6 +9,8 @@ import Speech
 @MainActor
 final class VoiceRecognizer {
     typealias Handler = @MainActor (VoiceInputSession.Event) -> Void
+    /// 録音の音の大きさ（0〜1）を受け取る
+    typealias LevelHandler = @MainActor (Double) -> Void
 
     static let shared = VoiceRecognizer()
 
@@ -18,17 +20,19 @@ final class VoiceRecognizer {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var handler: Handler?
+    private var levelHandler: LevelHandler?
     /// 始めるたびに増やす。止めたあとに届いた古い結果を捨てるのに使う
     private var generation = 0
 
     private init() {}
 
     /// 許可を確かめてから、録音と認識を始める。前の聞き取りが残っていれば捨てる
-    func start(handler: @escaping Handler) {
+    func start(handler: @escaping Handler, levelHandler: @escaping LevelHandler) {
         self.cancel()
         self.generation += 1
         let generation = self.generation
         self.handler = handler
+        self.levelHandler = levelHandler
         Task { @MainActor in
             if let failure = await Self.requestPermissions() {
                 self.deliver(.failed(failure), generation: generation)
@@ -57,6 +61,7 @@ final class VoiceRecognizer {
     func cancel() {
         self.generation += 1
         self.handler = nil
+        self.levelHandler = nil
         self.stopAudio()
         self.request?.endAudio()
         self.task?.cancel()
@@ -113,7 +118,10 @@ final class VoiceRecognizer {
         guard format.sampleRate > 0, format.channelCount > 0 else {
             throw RecognitionFailure(failure: .other("マイクが見つかりません"))
         }
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format, block: Self.makeTapBlock(request: request))
+        let tapBlock = Self.makeTapBlock(request: request) { [weak self] level in
+            self?.deliverLevel(level, generation: generation)
+        }
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format, block: tapBlock)
         audioEngine.prepare()
         do {
             try audioEngine.start()
@@ -130,10 +138,37 @@ final class VoiceRecognizer {
     }
 
     /// 録音スレッドで呼ばれるので、MainActor に縛られないクロージャーとして作る
-    nonisolated private static func makeTapBlock(request: SFSpeechAudioBufferRecognitionRequest) -> AVAudioNodeTapBlock {
+    nonisolated private static func makeTapBlock(
+        request: SFSpeechAudioBufferRecognitionRequest,
+        onLevel: @escaping @MainActor (Double) -> Void
+    ) -> AVAudioNodeTapBlock {
         { buffer, _ in
             request.append(buffer)
+            let level = VoiceLevel.normalized(rms: Self.rms(of: buffer))
+            Task { @MainActor in
+                onLevel(level)
+            }
         }
+    }
+
+    /// 1 つ目のチャンネルの RMS
+    nonisolated private static func rms(of buffer: AVAudioPCMBuffer) -> Double {
+        guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else {
+            return 0
+        }
+        let count = Int(buffer.frameLength)
+        var sum: Float = 0
+        for index in 0..<count {
+            sum += samples[index] * samples[index]
+        }
+        return Double((sum / Float(count)).squareRoot())
+    }
+
+    private func deliverLevel(_ level: Double, generation: Int) {
+        guard generation == self.generation, self.audioEngine != nil else {
+            return
+        }
+        self.levelHandler?(level)
     }
 
     /// 認識の結果から取り出したもの

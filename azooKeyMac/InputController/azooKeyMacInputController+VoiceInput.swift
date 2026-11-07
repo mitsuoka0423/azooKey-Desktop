@@ -82,6 +82,9 @@ extension azooKeyMacInputController {
         } else {
             VoiceRecognizer.shared.cancel()
         }
+        self.voicePillPresenter.end()
+        self.stopVoicePillTimer()
+        self.voicePillWindow.hide(animated: false)
     }
 
     // MARK: - 中身
@@ -98,6 +101,12 @@ extension azooKeyMacInputController {
 
     @MainActor
     private func handleVoiceRecognitionEvent(_ event: VoiceInputSession.Event) {
+        switch event {
+        case .partialResult, .utteranceEnded, .finalResult:
+            self.voicePillPresenter.recognized(at: Self.now)
+        default:
+            break
+        }
         let outcome = self.voiceInputSession.handle(event)
         guard let client = self.client() else {
             if !self.voiceInputSession.isActive {
@@ -108,13 +117,21 @@ extension azooKeyMacInputController {
         self.performVoiceInputEffects(outcome.effects, client: client)
     }
 
+    // 効果ごとに 1 つずつ分けて書くと、かえって流れが追いにくいので lint を外す
     @MainActor
+    // swiftlint:disable:next cyclomatic_complexity
     private func performVoiceInputEffects(_ effects: [VoiceInputSession.Effect], client: IMKTextInput) {
         for effect in effects {
             switch effect {
             case .startRecognition:
+                self.voicePillPresenter.start(at: Self.now)
+                self.updateVoicePillAnchor(client: client)
+                self.startVoicePillTimer()
                 VoiceRecognizer.shared.start { [weak self] event in
                     self?.handleVoiceRecognitionEvent(event)
+                } levelHandler: { [weak self] level in
+                    self?.voicePillPresenter.updateLevel(level, at: Self.now)
+                    self?.refreshVoicePill()
                 }
             case .finishRecognition:
                 VoiceRecognizer.shared.finish()
@@ -130,28 +147,93 @@ extension azooKeyMacInputController {
                 VoiceRecognizer.shared.cancel()
             case .setMarkedText(let text):
                 self.setVoiceInputMarkedText(text, client: client)
+                self.updateVoicePillAnchor(client: client)
             case .clearMarkedText:
-                self.setVoiceInputMarkedText("", client: client)
+                self.setVoiceInputMarkedText(VoiceInlineText(), client: client)
             case .commit(let text):
                 client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             case .report(let failure):
                 self.segmentsManager.appendDebugMessage("Voice input failed: \(failure)")
+                self.voicePillPresenter.fail(failure, at: Self.now)
+                self.startVoicePillTimer()
                 if let url = failure.privacySettingsURL {
                     NSWorkspace.shared.open(url)
                 }
             }
         }
+        if !self.voiceInputSession.isActive, self.voicePillPresenter.isFailureExpired(at: Self.now) {
+            self.voicePillPresenter.end()
+        }
+        self.refreshVoicePill()
     }
 
-    private func setVoiceInputMarkedText(_ text: String, client: IMKTextInput) {
-        let underline = self.mark(
+    /// 固まった部分は実線（`VoiceInlineText.Settled`）、まだ変わる部分は点線（`VoiceInlineText.Live`）の下線で出す
+    private func setVoiceInputMarkedText(_ text: VoiceInlineText, client: IMKTextInput) {
+        var settledAttributes = self.mark(
             forStyle: kTSMHiliteConvertedText,
             at: NSRange(location: NSNotFound, length: 0)
-        ) as? [NSAttributedString.Key: Any]
+        ) as? [NSAttributedString.Key: Any] ?? [:]
+        settledAttributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        settledAttributes[.markedClauseSegment] = 0
+        var liveAttributes = settledAttributes
+        liveAttributes[.underlineStyle] = NSUnderlineStyle.single.union(.patternDot).rawValue
+        liveAttributes[.markedClauseSegment] = text.settled.isEmpty ? 0 : 1
+
+        let attributed = NSMutableAttributedString()
+        attributed.append(NSAttributedString(string: text.settled, attributes: settledAttributes))
+        attributed.append(NSAttributedString(string: text.live, attributes: liveAttributes))
         client.setMarkedText(
-            NSAttributedString(string: text, attributes: underline),
-            selectionRange: NSRange(location: text.utf16.count, length: 0),
+            attributed,
+            selectionRange: NSRange(location: attributed.length, length: 0),
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
+    }
+
+    // MARK: - 聞き取りピル
+
+    private static var now: TimeInterval {
+        ProcessInfo.processInfo.systemUptime
+    }
+
+    /// ピルの位置の基準。入力先への問い合わせは重いので、未確定文字列が変わったときだけ取り直す
+    private func updateVoicePillAnchor(client: IMKTextInput) {
+        var rect: NSRect = .zero
+        client.attributes(forCharacterIndex: 0, lineHeightRectangle: &rect)
+        self.voicePillAnchor = rect
+    }
+
+    @MainActor
+    private func refreshVoicePill() {
+        let model = self.voicePillPresenter.model(
+            phase: self.voiceInputSession.phase,
+            now: Self.now,
+            shortcut: Config.VoiceInputShortcut().value,
+            reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        )
+        if let model {
+            self.voicePillWindow.show(model: model, anchor: self.voicePillAnchor)
+        } else {
+            self.voicePillWindow.hide()
+            self.stopVoicePillTimer()
+        }
+    }
+
+    /// 2 秒・3 秒の決まりのために、ピルが出ているあいだだけ見直す
+    private func startVoicePillTimer() {
+        guard self.voicePillTimer == nil else {
+            return
+        }
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshVoicePill()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.voicePillTimer = timer
+    }
+
+    private func stopVoicePillTimer() {
+        self.voicePillTimer?.invalidate()
+        self.voicePillTimer = nil
     }
 }
