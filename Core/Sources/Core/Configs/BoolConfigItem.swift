@@ -50,6 +50,12 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableLiveConversionPanel"
     }
+    /// ショートカットやメニューから音声入力を使う設定
+    public struct VoiceInput: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableVoiceInput"
+    }
     /// 円マークの代わりにバックスラッシュを入力する設定
     public struct TypeBackSlash: BoolConfigItem {
         public init() {}

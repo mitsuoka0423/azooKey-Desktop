@@ -85,6 +85,10 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)_Connection</string>
 	<key>InputMethodServerControllerClass</key>
 	<string>$(PRODUCT_MODULE_NAME).azooKeyMacInputController</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>音声入力で、話した言葉を文字にするためにマイクを使います。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>音声入力で、話した言葉をこの Mac の中で文字にするために音声認識を使います。音声は外部に送信しません。</string>
 	<key>LSBackgroundOnly</key>
 	<true/>
 	<key>tsInputMethodCharacterRepertoireKey</key>
