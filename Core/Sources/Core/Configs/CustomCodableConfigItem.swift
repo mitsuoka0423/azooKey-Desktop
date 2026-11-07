@@ -185,8 +185,8 @@ extension Config {
             /// 設定画面に出す名前。何ができるかを先に書き、仕組みの名前はかっこの中に残す
             public var displayName: String {
                 switch self {
-                case .speechTranscriber: "高精度（SpeechTranscriber・ささやき声も認識・macOS 26 以降）"
-                case .standard: "互換（SFSpeechRecognizer・macOS 15 以前でも使える）"
+                case .speechTranscriber: "高精度（SpeechTranscriber・macOS 26 Tahoe 以降）"
+                case .standard: "互換（SFSpeechRecognizer・macOS 13 Ventura 以降）"
                 }
             }
 

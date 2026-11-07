@@ -200,8 +200,8 @@ struct VoiceRecognitionEngineConfigTests {
     @Test("設定画面の名前は、何ができるかを先に書き、仕組みの名前をかっこに残す。既定の高精度を先に出す")
     func displayNames() {
         #expect(Config.VoiceRecognitionEngine.Value.allCases == [.speechTranscriber, .standard])
-        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.displayName == "高精度（SpeechTranscriber・ささやき声も認識・macOS 26 以降）")
-        #expect(Config.VoiceRecognitionEngine.Value.standard.displayName == "互換（SFSpeechRecognizer・macOS 15 以前でも使える）")
+        #expect(Config.VoiceRecognitionEngine.Value.speechTranscriber.displayName == "高精度（SpeechTranscriber・macOS 26 Tahoe 以降）")
+        #expect(Config.VoiceRecognitionEngine.Value.standard.displayName == "互換（SFSpeechRecognizer・macOS 13 Ventura 以降）")
     }
 
     @Test("保存する値は変えない")
