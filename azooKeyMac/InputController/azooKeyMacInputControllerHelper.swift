@@ -15,7 +15,6 @@ extension azooKeyMacInputController {
         self.appMenu.addItem(self.transformSelectedTextMenuItem)
         self.voiceInputMenuItem = NSMenuItem(title: "音声入力を開始・停止", action: #selector(self.toggleVoiceInput(_:)), keyEquivalent: "")
         self.voiceInputMenuItem.target = self
-        self.appMenu.addItem(self.voiceInputMenuItem)
         self.updateVoiceInputMenuItem()
         self.appMenu.addItem(NSMenuItem.separator())
         self.appMenu.addItem(NSMenuItem(title: "設定…", action: #selector(self.openConfigWindow(_:)), keyEquivalent: ""))

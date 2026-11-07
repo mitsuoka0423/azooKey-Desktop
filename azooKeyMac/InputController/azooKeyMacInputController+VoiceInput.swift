@@ -51,15 +51,20 @@ extension azooKeyMacInputController {
         }
     }
 
-    /// 設定に合わせてメニュー項目を出し入れする。
+    /// 設定がオンのときだけ、メニューに音声入力の項目を入れる。
     ///
-    /// メニューを書き換えると IMK が入力先を一度 deactivate するので、打鍵や聞き取りのたびには呼ばない。
-    /// 値が変わったときだけ書き換え、タイトルやキー表示も固定にしている
+    /// 設定がオフのときはメニューを本家と同じにしておく。隠した項目（`isHidden`）を入れたままにすると、
+    /// 打鍵のたびに IME が入力先との接続を切り、日本語入力が通らなくなったため。
+    /// 打鍵のたびには書き換えず、設定が変わったときだけ出し入れする
     /// （ショートカットの判定は `handleVoiceInputKeyEvent` が行う）。
     func updateVoiceInputMenuItem() {
-        let hidden = !Config.VoiceInput().value
-        if self.voiceInputMenuItem.isHidden != hidden {
-            self.voiceInputMenuItem.isHidden = hidden
+        let enabled = Config.VoiceInput().value
+        let index = self.appMenu.index(of: self.voiceInputMenuItem)
+        if enabled, index < 0 {
+            let transformIndex = self.appMenu.index(of: self.transformSelectedTextMenuItem)
+            self.appMenu.insertItem(self.voiceInputMenuItem, at: transformIndex + 1)
+        } else if !enabled, index >= 0 {
+            self.appMenu.removeItem(at: index)
         }
     }
 
