@@ -16,6 +16,7 @@
 		551434E82D576B6600A9B5CA /* lm_c_abc.marisa in Resources */ = {isa = PBXBuildFile; fileRef = 551434E12D576B6600A9B5CA /* lm_c_abc.marisa */; };
 		551434EA2D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf in Resources */ = {isa = PBXBuildFile; fileRef = 551434E92D57A8AC00A9B5CA /* ggml-model-Q5_K_M.gguf */; };
 		554A26602DB37657003C5CFB /* Core in Frameworks */ = {isa = PBXBuildFile; productRef = 554A265F2DB37657003C5CFB /* Core */; };
+		5A5A00012F10000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5A5A00032F10000000000001 /* Sparkle */; };
 		556C52FB2BAAAF7E00EB343F /* en.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52F92BAAAF7D00EB343F /* en.tiff */; };
 		556C52FC2BAAAF7E00EB343F /* en@2x.tiff in Resources */ = {isa = PBXBuildFile; fileRef = 556C52FA2BAAAF7D00EB343F /* en@2x.tiff */; };
 		55A27D022BAAADDB00512DCD /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 55A27D002BAAADDB00512DCD /* InfoPlist.strings */; };
@@ -75,6 +76,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				554A26602DB37657003C5CFB /* Core in Frameworks */,
+				5A5A00012F10000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -174,6 +176,7 @@
 			name = azooKeyMac;
 			packageProductDependencies = (
 				554A265F2DB37657003C5CFB /* Core */,
+				5A5A00032F10000000000001 /* Sparkle */,
 			);
 			productName = azooKeyMac;
 			productReference = 1A41E61426E745D9009B65D7 /* azooKeyMac.app */;
@@ -255,6 +258,7 @@
 			mainGroup = 1A41E60B26E745D9009B65D7;
 			packageReferences = (
 				554A265E2DB37657003C5CFB /* XCLocalSwiftPackageReference "Core" */,
+				5A5A00022F10000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = 1A41E61526E745D9009B65D7 /* Products */;
 			projectDirPath = "";
@@ -694,7 +698,23 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		5A5A00022F10000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		5A5A00032F10000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A5A00022F10000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
 		554A265F2DB37657003C5CFB /* Core */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Core;
