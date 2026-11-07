@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import Core
@@ -196,9 +197,22 @@ struct SpeechTranscriberResultTests {
 
 @Suite("認識の仕組みの設定")
 struct VoiceRecognitionEngineConfigTests {
-    @Test("既定は標準")
-    func defaultIsStandard() {
-        #expect(Config.VoiceRecognitionEngine.default == .standard)
+    @Test("既定は新しい認識（SpeechTranscriber）")
+    func defaultIsSpeechTranscriber() {
+        #expect(Config.VoiceRecognitionEngine.default == .speechTranscriber)
+    }
+
+    @Test("既定のままでも、macOS 26 より前では標準を使う")
+    func defaultFallsBackOnOlderOS() {
+        #expect(Config.VoiceRecognitionEngine.default.resolved(speechTranscriberAvailable: false) == .standard)
+        #expect(Config.VoiceRecognitionEngine.default.resolved(speechTranscriberAvailable: true) == .speechTranscriber)
+    }
+
+    @Test("保存した値の読み書き：標準を選んだ人は標準のまま")
+    func savedChoiceIsKept() {
+        let rawStandard = try? JSONEncoder().encode(Config.VoiceRecognitionEngine.Value.standard)
+        let decoded = rawStandard.flatMap { try? JSONDecoder().decode(Config.VoiceRecognitionEngine.Value.self, from: $0) }
+        #expect(decoded == .standard)
     }
 
     @Test("新しい認識が使えない OS では標準を使う")

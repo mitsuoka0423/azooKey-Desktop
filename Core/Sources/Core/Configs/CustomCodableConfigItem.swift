@@ -196,7 +196,8 @@ extension Config {
         }
 
         public init() {}
-        public static let `default`: Value = .standard
+        /// 既定は新しい認識（ささやき声も拾えたため）。macOS 26 より前では `resolved` で標準になる
+        public static let `default`: Value = .speechTranscriber
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.voice_recognition_engine"
     }
 }
