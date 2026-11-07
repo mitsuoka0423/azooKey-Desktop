@@ -4,13 +4,25 @@ import Speech
 
 /// マイクの音を日本語のオンデバイス認識にかけ、結果を `VoiceInputSession.Event` として渡す。
 ///
-/// 音声は Mac の外に送らない（`requiresOnDeviceRecognition`）。
+/// 認識の仕組みは設定で選ぶ。標準は SFSpeechRecognizer（`requiresOnDeviceRecognition`）、
+/// 新しい認識は SpeechTranscriber（macOS 26 以降、`TranscriberRecognition`）。どちらも音声は Mac の外に送らない。
 /// 入力欄ごとに `azooKeyMacInputController` が作られるが、マイクは 1 つなので全体で 1 つだけ持つ。
 @MainActor
 final class VoiceRecognizer {
     typealias Handler = @MainActor (VoiceInputSession.Event) -> Void
     /// 録音の音の大きさ（0〜1）を受け取る
     typealias LevelHandler = @MainActor (Double) -> Void
+    /// 認識モデルのダウンロードを始めた（true）・終えた（false）
+    typealias PreparingModelHandler = @MainActor (Bool) -> Void
+
+    /// この Mac で新しい認識（SpeechTranscriber）を使えるか
+    static var isSpeechTranscriberAvailable: Bool {
+        if #available(macOS 26.0, *) {
+            true
+        } else {
+            false
+        }
+    }
 
     static let shared = VoiceRecognizer()
 
@@ -21,13 +33,15 @@ final class VoiceRecognizer {
     private var task: SFSpeechRecognitionTask?
     private var handler: Handler?
     private var levelHandler: LevelHandler?
+    /// 新しい認識での聞き取り（`TranscriberRecognition`。macOS 26 より前の OS でも持てるように AnyObject にする）
+    private var transcription: AnyObject?
     /// 始めるたびに増やす。止めたあとに届いた古い結果を捨てるのに使う
     private var generation = 0
 
     private init() {}
 
     /// 許可を確かめてから、録音と認識を始める。前の聞き取りが残っていれば捨てる
-    func start(handler: @escaping Handler, levelHandler: @escaping LevelHandler) {
+    func start(handler: @escaping Handler, levelHandler: @escaping LevelHandler, preparingModelHandler: @escaping PreparingModelHandler) {
         self.cancel()
         self.generation += 1
         let generation = self.generation
@@ -41,9 +55,14 @@ final class VoiceRecognizer {
             guard generation == self.generation else {
                 return
             }
+            let engine = Config.VoiceRecognitionEngine().value.resolved(speechTranscriberAvailable: Self.isSpeechTranscriberAvailable)
             do {
-                try self.beginRecognition(generation: generation)
-            } catch let failure as RecognitionFailure {
+                if engine == .speechTranscriber, #available(macOS 26.0, *) {
+                    try await self.beginTranscription(generation: generation, preparingModelHandler: preparingModelHandler)
+                } else {
+                    try self.beginRecognition(generation: generation)
+                }
+            } catch let failure as VoiceRecognitionFailure {
                 self.deliver(.failed(failure.failure), generation: generation)
             } catch {
                 self.deliver(.failed(.other(error.localizedDescription)), generation: generation)
@@ -53,6 +72,10 @@ final class VoiceRecognizer {
 
     /// 録音を止め、認識の最後の結果を待つ
     func finish() {
+        if #available(macOS 26.0, *), let transcription = self.transcription as? TranscriberRecognition {
+            transcription.finish()
+            return
+        }
         self.stopAudio()
         self.request?.endAudio()
     }
@@ -62,6 +85,10 @@ final class VoiceRecognizer {
         self.generation += 1
         self.handler = nil
         self.levelHandler = nil
+        if #available(macOS 26.0, *), let transcription = self.transcription as? TranscriberRecognition {
+            transcription.cancel()
+        }
+        self.transcription = nil
         self.stopAudio()
         self.request?.endAudio()
         self.task?.cancel()
@@ -70,10 +97,6 @@ final class VoiceRecognizer {
     }
 
     // MARK: - 中身
-
-    private struct RecognitionFailure: Error {
-        var failure: VoiceInputSession.Failure
-    }
 
     private static func requestPermissions() async -> VoiceInputSession.Failure? {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
@@ -105,7 +128,7 @@ final class VoiceRecognizer {
     private func beginRecognition(generation: Int) throws {
         guard let recognizer = SFSpeechRecognizer(locale: Self.locale),
               recognizer.supportsOnDeviceRecognition else {
-            throw RecognitionFailure(failure: .onDeviceRecognitionUnavailable)
+            throw VoiceRecognitionFailure(failure: .onDeviceRecognitionUnavailable)
         }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -116,7 +139,7 @@ final class VoiceRecognizer {
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw RecognitionFailure(failure: .other("マイクが見つかりません"))
+            throw VoiceRecognitionFailure(failure: .other("マイクが見つかりません"))
         }
         let tapBlock = Self.makeTapBlock(request: request) { [weak self] level in
             self?.deliverLevel(level, generation: generation)
@@ -127,7 +150,7 @@ final class VoiceRecognizer {
             try audioEngine.start()
         } catch {
             inputNode.removeTap(onBus: 0)
-            throw RecognitionFailure(failure: .other("録音を始められません: \(error.localizedDescription)"))
+            throw VoiceRecognitionFailure(failure: .other("録音を始められません: \(error.localizedDescription)"))
         }
 
         self.audioEngine = audioEngine
@@ -135,6 +158,43 @@ final class VoiceRecognizer {
         self.task = recognizer.recognitionTask(with: request, resultHandler: Self.makeResultHandler { [weak self] result in
             self?.handleResult(result, generation: generation)
         })
+    }
+
+    @available(macOS 26.0, *)
+    private func beginTranscription(generation: Int, preparingModelHandler: @escaping PreparingModelHandler) async throws {
+        let transcription = try await TranscriberRecognition.start(
+            locale: Self.locale,
+            onPreparingModel: { [weak self] preparing in
+                guard let self, generation == self.generation else {
+                    return
+                }
+                preparingModelHandler(preparing)
+            },
+            onEvent: { [weak self] event in
+                guard let self, generation == self.generation else {
+                    return
+                }
+                switch event {
+                case .finalResult, .failed:
+                    self.transcription = nil
+                default:
+                    break
+                }
+                self.deliver(event, generation: generation)
+            },
+            onLevel: { [weak self] level in
+                guard let self, generation == self.generation, self.transcription != nil else {
+                    return
+                }
+                self.levelHandler?(level)
+            }
+        )
+        // 準備しているあいだに取り消されていたら、すぐ捨てる
+        guard generation == self.generation else {
+            transcription.cancel()
+            return
+        }
+        self.transcription = transcription
     }
 
     /// 録音スレッドで呼ばれるので、MainActor に縛られないクロージャーとして作る
@@ -152,7 +212,7 @@ final class VoiceRecognizer {
     }
 
     /// 1 つ目のチャンネルの RMS
-    nonisolated private static func rms(of buffer: AVAudioPCMBuffer) -> Double {
+    nonisolated static func rms(of buffer: AVAudioPCMBuffer) -> Double {
         guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else {
             return 0
         }

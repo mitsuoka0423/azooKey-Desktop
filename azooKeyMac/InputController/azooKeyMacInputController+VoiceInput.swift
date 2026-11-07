@@ -102,7 +102,7 @@ extension azooKeyMacInputController {
     @MainActor
     private func handleVoiceRecognitionEvent(_ event: VoiceInputSession.Event) {
         switch event {
-        case .partialResult, .utteranceEnded, .finalResult:
+        case .partialResult, .volatileResult, .utteranceEnded, .finalResult:
             self.voicePillPresenter.recognized(at: Self.now)
         default:
             break
@@ -131,6 +131,9 @@ extension azooKeyMacInputController {
                     self?.handleVoiceRecognitionEvent(event)
                 } levelHandler: { [weak self] level in
                     self?.voicePillPresenter.updateLevel(level, at: Self.now)
+                    self?.refreshVoicePill()
+                } preparingModelHandler: { [weak self] preparing in
+                    self?.voicePillPresenter.setPreparingModel(preparing, at: Self.now)
                     self?.refreshVoicePill()
                 }
             case .finishRecognition:

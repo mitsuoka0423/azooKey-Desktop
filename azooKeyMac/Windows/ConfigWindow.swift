@@ -7,6 +7,7 @@ struct ConfigWindow: View {
     @ConfigState private var liveConversionPanel = Config.LiveConversionPanel()
     @ConfigState private var voiceInput = Config.VoiceInput()
     @ConfigState private var voiceInputShortcut = Config.VoiceInputShortcut()
+    @ConfigState private var voiceRecognitionEngine = Config.VoiceRecognitionEngine()
     @ConfigState private var inputStyle = Config.InputStyle()
     @ConfigState private var typeBackSlash = Config.TypeBackSlash()
     @ConfigState private var punctuationStyle = Config.PunctuationStyle()
@@ -521,6 +522,14 @@ struct ConfigWindow: View {
                         .frame(width: 160, height: 24)
                 }
                 .disabled(!$voiceInput.wrappedValue)
+                if #available(macOS 26.0, *) {
+                    Picker("認識の仕組み", selection: $voiceRecognitionEngine) {
+                        ForEach(Config.VoiceRecognitionEngine.Value.allCases, id: \.self) { engine in
+                            Text(engine.displayName).tag(engine)
+                        }
+                    }
+                    .disabled(!$voiceInput.wrappedValue)
+                }
             } header: {
                 Label("音声入力", systemImage: "mic")
             } footer: {
