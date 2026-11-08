@@ -4,9 +4,9 @@ import Testing
 
 @Suite("SoftwareUpdateMenuItem")
 struct SoftwareUpdateMenuItemTests {
-    @Test("更新を確かめられないときは、項目を残したまま押せなくする")
+    @Test("更新を確かめられないときは、項目を残したまま押せなくし、題でも使えないことを伝える")
     func unavailable() {
-        #expect(SoftwareUpdateMenuItem.make(for: .unavailable) == SoftwareUpdateMenuItem(title: "アップデートを確認…", isEnabled: false))
+        #expect(SoftwareUpdateMenuItem.make(for: .unavailable) == SoftwareUpdateMenuItem(title: "アップデートを確認（このビルドでは使えません）", isEnabled: false))
     }
 
     @Test("ふだんは「アップデートを確認…」を押せる")

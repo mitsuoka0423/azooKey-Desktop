@@ -26,7 +26,8 @@ public struct SoftwareUpdateMenuItem: Sendable, Equatable {
     public static func make(for state: State) -> Self {
         switch state {
         case .unavailable:
-            Self(title: "アップデートを確認…", isEnabled: false)
+            // 入力メニューは押せるかどうかを反映しないことがあるので、題でも使えないことを伝える
+            Self(title: "アップデートを確認（このビルドでは使えません）", isEnabled: false)
         case .idle:
             Self(title: "アップデートを確認…", isEnabled: true)
         case .updateAvailable(let version):
