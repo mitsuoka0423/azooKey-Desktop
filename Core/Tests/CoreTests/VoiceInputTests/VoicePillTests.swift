@@ -151,7 +151,7 @@ struct VoiceLevelTests {
     func normalize() {
         #expect(VoiceLevel.normalized(rms: 0) == 0)
         #expect(VoiceLevel.normalized(rms: 0.001) == 0) // -60dB
-        #expect(abs(VoiceLevel.normalized(rms: 0.01) - 0.25) < 0.0001) // -40dB
+        #expect((VoiceLevel.normalized(rms: 0.01) - 0.25).magnitude < 0.0001) // -40dB
         #expect(VoiceLevel.normalized(rms: 0.5) == 1)
     }
 

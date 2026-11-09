@@ -15,9 +15,11 @@ jobs:
     name: Build and Test on macOS
     runs-on: macos-15
     steps:
-      - name: Select Xcode 16.3
+      - name: Select Xcode 26
         run: |
-          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
+          # 音声入力の SpeechTranscriber（macOS 26 SDK）を使うので、Xcode 26 のいちばん新しいものを使う
+          XCODE_PATH=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)
+          test -n "$XCODE_PATH"
           echo "Using Xcode at $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
@@ -49,9 +51,11 @@ jobs:
     name: Xcodebuild test on macOS
     runs-on: macos-15
     steps:
-      - name: Select Xcode 16.3
+      - name: Select Xcode 26
         run: |
-          XCODE_PATH=$(ls -d /Applications/Xcode_16.3*.app | head -n 1)
+          # 音声入力の SpeechTranscriber（macOS 26 SDK）を使うので、Xcode 26 のいちばん新しいものを使う
+          XCODE_PATH=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -n 1)
+          test -n "$XCODE_PATH"
           echo "Using Xcode at $XCODE_PATH"
           sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
           xcodebuild -version
