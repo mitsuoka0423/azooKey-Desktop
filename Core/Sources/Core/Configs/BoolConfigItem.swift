@@ -50,6 +50,12 @@ extension Config {
         static let `default` = false
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableLiveConversionPanel"
     }
+    /// 「きょう」「いま」などから今の日付・時刻を候補に出す設定
+    public struct DateTimeCandidates: BoolConfigItem {
+        public init() {}
+        static let `default` = true
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableDateTimeCandidates"
+    }
     /// ショートカットやメニューから音声入力を使う設定
     public struct VoiceInput: BoolConfigItem {
         public init() {}

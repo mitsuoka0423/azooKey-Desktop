@@ -20,16 +20,19 @@ public final class SegmentsManager {
     /// テストなどの設定注入のための型。外部には設定を露出させない。
     public struct Context {
         public init() {}
-        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil, forceLiveConversionPanel: Bool = false) {
+        public init(useZenzai: Bool, resourcesDirectoryURL: URL? = nil, forceLiveConversionPanel: Bool = false, now: @escaping () -> Date = Date.init) {
             self.useZenzai = useZenzai
             self.resourcesDirectoryURL = resourcesDirectoryURL
             self.forceLiveConversionPanel = forceLiveConversionPanel
+            self.now = now
         }
 
         var useZenzai: Bool = true
         var resourcesDirectoryURL: URL?
         /// 設定に関わらず変換パネルをオンとして扱う（テスト用）
         var forceLiveConversionPanel = false
+        /// 日時の候補に使う今の時刻（テストで固定するため）
+        var now: () -> Date = Date.init
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
@@ -494,6 +497,43 @@ public final class SegmentsManager {
     }
 
     private var rawCandidatesList: [Candidate]? {
+        guard let rawCandidates = self.engineCandidatesList else {
+            return nil
+        }
+        return Self.inserting(self.dateTimeCandidates(), into: rawCandidates)
+    }
+
+    /// 日時の候補は、今の候補の 3 番目から入れる。同じ表記の候補は日時の側に寄せる
+    private static func inserting(_ dateTimeCandidates: [Candidate], into candidates: [Candidate]) -> [Candidate] {
+        guard !dateTimeCandidates.isEmpty else {
+            return candidates
+        }
+        let texts = Set(dateTimeCandidates.map(\.text))
+        var result = candidates.filter { !texts.contains($0.text) }
+        result.insert(contentsOf: dateTimeCandidates, at: min(2, result.count))
+        return result
+    }
+
+    /// 「きょう」「いま」など、打った読み全体が日時の読みのときの日時の候補
+    private func dateTimeCandidates() -> [Candidate] {
+        guard Config.DateTimeCandidates().value, !self.didExperienceSegmentEdition else {
+            return []
+        }
+        let reading = self.composingText.convertTarget
+        return DateTimeCandidates.candidates(reading: reading, now: self.context.now()).map { text in
+            Candidate(
+                text: text,
+                value: 0,
+                composingCount: .inputCount(self.composingText.input.count),
+                lastMid: MIDData.一般.mid,
+                data: [DicdataElement(word: text, ruby: reading.toKatakana(), cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: 0)],
+                // 日時は毎回変わるので学習しない
+                isLearningTarget: false
+            )
+        }
+    }
+
+    private var engineCandidatesList: [Candidate]? {
         guard let rawCandidates else {
             return nil
         }
@@ -589,38 +629,6 @@ public final class SegmentsManager {
             self.withConverter { $0.stopComposition() }
             return
         }
-        /// 日付・時刻変換を事前に入れておく
-        let dynamicShortcuts: [DicdataElement] =
-            [
-                ("M/d", -18, DateTemplateLiteral.CalendarType.western),
-                ("yyyy/MM/dd", -18.1, .western),
-                ("yyyy-MM-dd", -18.2, .western),
-                ("M月d日（E）", -18.3, .western),
-                ("yyyy年M月d日", -18.4, .western),
-                ("Gyyyy年M月d日", -18.5, .japanese),
-                ("E曜日", -18.6, .western)
-            ].flatMap { (format, value: PValue, type) in
-                [
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-2", deltaUnit: 60 * 60 * 24).export(), ruby: "オトトイ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "-1", deltaUnit: 60 * 60 * 24).export(), ruby: "キノウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "キョウ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "1", deltaUnit: 60 * 60 * 24).export(), ruby: "アシタ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value),
-                    .init(word: DateTemplateLiteral(format: format, type: type, language: .japanese, delta: "2", deltaUnit: 60 * 60 * 24).export(), ruby: "アサッテ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: value)
-                ]
-            } + [
-                // 月
-                .init(word: DateTemplateLiteral(format: "MM月", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コンゲツ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                // 年
-                .init(word: DateTemplateLiteral(format: "yyyy年", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "Gyyyy年", type: .japanese, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "コトシ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                // 時刻
-                .init(word: DateTemplateLiteral(format: "HH:mm", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18),
-                .init(word: DateTemplateLiteral(format: "HH時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.1),
-                .init(word: DateTemplateLiteral(format: "aK時mm分", type: .western, language: .japanese, delta: "0", deltaUnit: 1).export(), ruby: "イマ", cid: CIDData.固有名詞.cid, mid: MIDData.一般.mid, value: -18.2)
-            ]
-
-        self.withConverter { $0.importDynamicUserDictionary([], shortcuts: dynamicShortcuts) }
-
         let leftSideContext = forcedLeftSideContext ?? self.getCleanLeftSideContext(maxCount: ContextLength.conversion)
         let rightSideContext = forcedRightSideContext ?? self.getCleanRightSideContext(maxCount: ContextLength.conversion)
         let result = self.withConverter { converter in
@@ -1381,6 +1389,9 @@ public final class SegmentsManager {
             engineSurface: clause.surface,
             reading: reading,
             dictionaryCandidates: dictionaryCandidates,
+            dateTimeCandidates: Config.DateTimeCandidates().value
+                ? DateTimeCandidates.candidates(reading: reading, now: self.context.now())
+                : [],
             typed: self.typedLetters(clauses, at: index)
         )
     }

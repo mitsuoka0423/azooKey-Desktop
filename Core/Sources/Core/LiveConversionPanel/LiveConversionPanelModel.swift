@@ -120,11 +120,15 @@ public struct LiveConversionPanelModel: Sendable, Equatable {
     }
 
     /// 文節の候補を並べる。最初の 9 件は、エンジンの表記を先頭に、辞書変換の候補、ひらがな、カタカナ、打ったとおりの英字の順。
-    /// 9 件に収まらない辞書の候補は、その後ろに続ける（ひらがな・カタカナ・英字を最初のページに残すため）。重なりを除き、最大 100 件
-    public static func candidates(engineSurface: String, reading: String, dictionaryCandidates: [String], typed: String? = nil) -> [String] {
+    /// 日時の候補（「きょう」の「2026/11/11」など）は、辞書変換の候補の 3 番目から入れる。
+    /// 9 件に収まらない候補は、その後ろに続ける（ひらがな・カタカナ・英字を最初のページに残すため）。重なりを除き、最大 100 件
+    public static func candidates(engineSurface: String, reading: String, dictionaryCandidates: [String], dateTimeCandidates: [String] = [], typed: String? = nil) -> [String] {
         let fixed = [reading, Self.katakana(reading), typed ?? ""]
-        var seen = Set<String>()
-        var firstPage = ([engineSurface] + dictionaryCandidates + fixed).filter { !$0.isEmpty && seen.insert($0).inserted }
+        var seen = Set(dateTimeCandidates)
+        var converted = ([engineSurface] + dictionaryCandidates).filter { !$0.isEmpty && seen.insert($0).inserted }
+        converted.insert(contentsOf: dateTimeCandidates, at: min(2, converted.count))
+        seen = []
+        var firstPage = (converted + fixed).filter { !$0.isEmpty && seen.insert($0).inserted }
         var rest: [String] = []
         while firstPage.count > LiveConversionPanelState.pageCandidateCount,
               let last = firstPage.indices.dropFirst().last(where: { !fixed.contains(firstPage[$0]) }) {

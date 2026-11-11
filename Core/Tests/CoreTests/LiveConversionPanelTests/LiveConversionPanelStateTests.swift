@@ -287,6 +287,19 @@ struct LiveConversionPanelModelTests {
         #expect(LiveConversionPanelModel.candidates(engineSurface: "a", reading: "あ", dictionaryCandidates: huge).count == 100)
     }
 
+    @Test("日時の候補は 3 番目から入れ、ひらがな・カタカナ・英字は最初のページに残す")
+    func dateTimeCandidateOrder() {
+        let dates = ["11/11", "2026/11/11", "2026-11-11", "11月11日（水）", "2026年11月11日", "令和8年11月11日", "水曜日"]
+        let all = LiveConversionPanelModel.candidates(
+            engineSurface: "今日", reading: "きょう", dictionaryCandidates: ["今日", "きょう", "境", "教"], dateTimeCandidates: dates, typed: "kyou"
+        )
+        #expect(Array(all.prefix(9)) == ["今日", "きょう", "11/11", "2026/11/11", "2026-11-11", "11月11日（水）", "2026年11月11日", "キョウ", "kyou"])
+        #expect(Array(all.dropFirst(9)) == ["令和8年11月11日", "水曜日", "境", "教"])
+        // 日時の候補がなければ今までどおり
+        #expect(LiveConversionPanelModel.candidates(engineSurface: "今日", reading: "きょう", dictionaryCandidates: ["今日", "きょう", "境"])
+                    == ["今日", "きょう", "境", "キョウ"])
+    }
+
     @Test("ひらがな・カタカナ・打ったとおりの英字は、辞書の候補が多くても残る")
     func fixedCandidatesStay() {
         let many = (1...20).map { "候補\($0)" }

@@ -5,6 +5,7 @@ import SwiftUI
 struct ConfigWindow: View {
     @ConfigState private var liveConversion = Config.LiveConversion()
     @ConfigState private var liveConversionPanel = Config.LiveConversionPanel()
+    @ConfigState private var dateTimeCandidates = Config.DateTimeCandidates()
     @ConfigState private var voiceInput = Config.VoiceInput()
     @ConfigState private var voiceInputShortcut = Config.VoiceInputShortcut()
     @ConfigState private var voiceRecognitionEngine = Config.VoiceRecognitionEngine()
@@ -501,6 +502,7 @@ struct ConfigWindow: View {
                 Toggle("ライブ変換を有効化", isOn: $liveConversion)
                 Toggle("変換パネルを使う", isOn: $liveConversionPanel)
                     .disabled(!$liveConversion.wrappedValue)
+                Toggle("「きょう」「いま」などで日付・時刻を候補に出す", isOn: $dateTimeCandidates)
                 HStack {
                     TextField("変換プロフィール", text: $zenzaiProfile, prompt: Text("例：田中太郎/高校生"))
                     helpButton(
