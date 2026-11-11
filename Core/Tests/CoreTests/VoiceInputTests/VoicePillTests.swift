@@ -133,6 +133,7 @@ struct VoicePillPresenterTests {
         #expect(VoicePillPresenter.message(for: .microphoneDenied) == "マイクが使えません")
         #expect(VoicePillPresenter.message(for: .speechRecognitionDenied) == "音声認識が許可されていません")
         #expect(VoicePillPresenter.message(for: .onDeviceRecognitionUnavailable) == "この Mac では音声認識を使えません")
+        #expect(VoicePillPresenter.message(for: .microphoneUnavailable) == "使えるマイクが見つかりません")
         #expect(VoicePillPresenter.message(for: .other("x")) == "うまく聞き取れませんでした")
     }
 
