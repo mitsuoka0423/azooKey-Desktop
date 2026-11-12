@@ -42,10 +42,11 @@ final class TranscriberRecognition {
         try await Self.prepareModel(for: transcriber, onPreparingModel: onPreparingModel)
 
         let audioEngine = AVAudioEngine()
+        try AudioInputDevice.useCurrentDefault(for: audioEngine)
         let inputNode = audioEngine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw VoiceRecognitionFailure(failure: .other("マイクが見つかりません"))
+            throw VoiceRecognitionFailure(failure: .microphoneUnavailable)
         }
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber], considering: inputFormat) else {
             throw VoiceRecognitionFailure(failure: .other("音声の形式を決められません"))

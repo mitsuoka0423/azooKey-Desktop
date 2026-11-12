@@ -162,6 +162,8 @@ public struct VoicePillPresenter: Sendable, Equatable {
             "この Mac では音声認識を使えません"
         case .modelUnavailable:
             "日本語の認識モデルを準備できません"
+        case .microphoneUnavailable:
+            "使えるマイクが見つかりません"
         case .other:
             "うまく聞き取れませんでした"
         }

@@ -38,7 +38,9 @@ final class VoiceRecognizer {
     /// 始めるたびに増やす。止めたあとに届いた古い結果を捨てるのに使う
     private var generation = 0
 
-    private init() {}
+    private init() {
+        AudioInputDevice.receiveChangesOnOwnThread()
+    }
 
     /// 許可を確かめてから、録音と認識を始める。前の聞き取りが残っていれば捨てる
     func start(handler: @escaping Handler, levelHandler: @escaping LevelHandler, preparingModelHandler: @escaping PreparingModelHandler) {
@@ -136,10 +138,11 @@ final class VoiceRecognizer {
         request.addsPunctuation = true
 
         let audioEngine = AVAudioEngine()
+        try AudioInputDevice.useCurrentDefault(for: audioEngine)
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw VoiceRecognitionFailure(failure: .other("マイクが見つかりません"))
+            throw VoiceRecognitionFailure(failure: .microphoneUnavailable)
         }
         let tapBlock = Self.makeTapBlock(request: request) { [weak self] level in
             self?.deliverLevel(level, generation: generation)
