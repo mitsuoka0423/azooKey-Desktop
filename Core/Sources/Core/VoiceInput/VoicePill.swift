@@ -164,6 +164,8 @@ public struct VoicePillPresenter: Sendable, Equatable {
             "日本語の認識モデルを準備できません"
         case .microphoneUnavailable:
             "使えるマイクが見つかりません"
+        case .microphoneNotResponding:
+            "マイクが応答しません"
         case .other:
             "うまく聞き取れませんでした"
         }

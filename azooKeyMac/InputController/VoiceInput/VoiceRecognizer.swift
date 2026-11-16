@@ -28,7 +28,7 @@ final class VoiceRecognizer {
 
     private static let locale = Locale(identifier: "ja-JP")
 
-    private var audioEngine: AVAudioEngine?
+    private var capture: AudioCapture?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var handler: Handler?
@@ -62,7 +62,7 @@ final class VoiceRecognizer {
                 if engine == .speechTranscriber, #available(macOS 26.0, *) {
                     try await self.beginTranscription(generation: generation, preparingModelHandler: preparingModelHandler)
                 } else {
-                    try self.beginRecognition(generation: generation)
+                    try await self.beginRecognition(generation: generation)
                 }
             } catch let failure as VoiceRecognitionFailure {
                 self.deliver(.failed(failure.failure), generation: generation)
@@ -127,7 +127,7 @@ final class VoiceRecognizer {
         return speechStatus == .authorized ? nil : .speechRecognitionDenied
     }
 
-    private func beginRecognition(generation: Int) throws {
+    private func beginRecognition(generation: Int) async throws {
         guard let recognizer = SFSpeechRecognizer(locale: Self.locale),
               recognizer.supportsOnDeviceRecognition else {
             throw VoiceRecognitionFailure(failure: .onDeviceRecognitionUnavailable)
@@ -137,26 +137,24 @@ final class VoiceRecognizer {
         request.requiresOnDeviceRecognition = true
         request.addsPunctuation = true
 
-        let audioEngine = AVAudioEngine()
-        try AudioInputDevice.useCurrentDefault(for: audioEngine)
-        let inputNode = audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw VoiceRecognitionFailure(failure: .microphoneUnavailable)
-        }
+        let capture = try await AudioCapture.open()
         let tapBlock = Self.makeTapBlock(request: request) { [weak self] level in
             self?.deliverLevel(level, generation: generation)
         }
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format, block: tapBlock)
-        audioEngine.prepare()
         do {
-            try audioEngine.start()
+            try await capture.start(tap: tapBlock)
         } catch {
-            inputNode.removeTap(onBus: 0)
-            throw VoiceRecognitionFailure(failure: .other("録音を始められません: \(error.localizedDescription)"))
+            capture.stop()
+            throw error
+        }
+        // 準備しているあいだに取り消されていたら、すぐ捨てる
+        guard generation == self.generation else {
+            capture.stop()
+            request.endAudio()
+            return
         }
 
-        self.audioEngine = audioEngine
+        self.capture = capture
         self.request = request
         self.task = recognizer.recognitionTask(with: request, resultHandler: Self.makeResultHandler { [weak self] result in
             self?.handleResult(result, generation: generation)
@@ -232,7 +230,7 @@ final class VoiceRecognizer {
     }
 
     private func deliverLevel(_ level: Double, generation: Int) {
-        guard generation == self.generation, self.audioEngine != nil else {
+        guard generation == self.generation, self.capture != nil else {
             return
         }
         self.levelHandler?(level)
@@ -287,12 +285,8 @@ final class VoiceRecognizer {
     }
 
     private func stopAudio() {
-        guard let audioEngine = self.audioEngine else {
-            return
-        }
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        self.audioEngine = nil
+        self.capture?.stop()
+        self.capture = nil
     }
 
     /// 認識が終わった・失敗したあとに、録音と認識を止める
