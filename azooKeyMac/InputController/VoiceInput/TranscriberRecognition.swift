@@ -22,6 +22,8 @@ final class TranscriberRecognition {
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
     private var audioEngine: AVAudioEngine?
     private var resultsTask: Task<Void, Never>?
+    /// 認識を終わらせたか（`release()` を一度だけ効かせる）
+    private var isReleased = false
 
     private init(analyzer: SpeechAnalyzer, continuation: AsyncStream<AnalyzerInput>.Continuation) {
         self.analyzer = analyzer
@@ -71,17 +73,23 @@ final class TranscriberRecognition {
             throw VoiceRecognitionFailure(failure: .other("認識を始められません: \(error.localizedDescription)"))
         }
 
+        // 認識が失敗したら、録音と認識を自分で止める。受け取る側が参照を捨てるだけだと、
+        // 録音と認識が裏で動き続け、失敗のたびに積み上がって IME が重くなるため。
+        // 終わるまで止められるように、recognition を強く持つ（終われば手放す）
         recognition.resultsTask = Task { @MainActor in
             do {
                 for try await result in transcriber.results {
                     let text = String(result.text.characters)
                     onEvent(result.isFinal ? .utteranceEnded(text) : .volatileResult(text))
                 }
+                recognition.release()
                 onEvent(.finalResult(""))
             } catch {
-                if !Task.isCancelled {
-                    onEvent(.failed(.other(error.localizedDescription)))
+                guard !Task.isCancelled else {
+                    return
                 }
+                recognition.release()
+                onEvent(.failed(.other(error.localizedDescription)))
             }
         }
 
@@ -113,15 +121,24 @@ final class TranscriberRecognition {
     func cancel() {
         self.resultsTask?.cancel()
         self.resultsTask = nil
+        self.release()
+    }
+
+    // MARK: - 中身
+
+    /// 録音を止め、認識を終わらせる。何度呼んでもよい
+    private func release() {
         self.stopAudio()
         self.continuation.finish()
+        guard !self.isReleased else {
+            return
+        }
+        self.isReleased = true
         let analyzer = self.analyzer
         Task {
             await analyzer.cancelAndFinishNow()
         }
     }
-
-    // MARK: - 中身
 
     private static func prepareModel(
         for transcriber: SpeechTranscriber,
@@ -158,10 +175,13 @@ final class TranscriberRecognition {
         continuation: AsyncStream<AnalyzerInput>.Continuation,
         onLevel: @escaping @MainActor (Double) -> Void
     ) -> AVAudioNodeTapBlock {
-        { buffer, _ in
-            let level = VoiceLevel.normalized(rms: VoiceRecognizer.rms(of: buffer))
-            Task { @MainActor in
-                onLevel(level)
+        let throttle = VoiceLevelThrottle()
+        return { buffer, _ in
+            if throttle.shouldDeliver(at: ProcessInfo.processInfo.systemUptime) {
+                let level = VoiceLevel.normalized(rms: VoiceRecognizer.rms(of: buffer))
+                Task { @MainActor in
+                    onLevel(level)
+                }
             }
             guard let converter else {
                 continuation.yield(AnalyzerInput(buffer: buffer))

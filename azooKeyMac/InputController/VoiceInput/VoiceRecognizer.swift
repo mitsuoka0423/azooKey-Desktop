@@ -205,8 +205,12 @@ final class VoiceRecognizer {
         request: SFSpeechAudioBufferRecognitionRequest,
         onLevel: @escaping @MainActor (Double) -> Void
     ) -> AVAudioNodeTapBlock {
-        { buffer, _ in
+        let throttle = VoiceLevelThrottle()
+        return { buffer, _ in
             request.append(buffer)
+            guard throttle.shouldDeliver(at: ProcessInfo.processInfo.systemUptime) else {
+                return
+            }
             let level = VoiceLevel.normalized(rms: Self.rms(of: buffer))
             Task { @MainActor in
                 onLevel(level)
@@ -291,8 +295,11 @@ final class VoiceRecognizer {
         self.audioEngine = nil
     }
 
+    /// 認識が終わった・失敗したあとに、録音と認識を止める
     private func tearDown() {
         self.stopAudio()
+        self.request?.endAudio()
+        self.task?.cancel()
         self.task = nil
         self.request = nil
     }
