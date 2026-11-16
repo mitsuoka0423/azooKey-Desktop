@@ -20,7 +20,7 @@ final class TranscriberRecognition {
 
     private let analyzer: SpeechAnalyzer
     private let continuation: AsyncStream<AnalyzerInput>.Continuation
-    private var audioEngine: AVAudioEngine?
+    private var capture: AudioCapture?
     private var resultsTask: Task<Void, Never>?
     /// 認識を終わらせたか（`release()` を一度だけ効かせる）
     private var isReleased = false
@@ -43,14 +43,10 @@ final class TranscriberRecognition {
         let transcriber = SpeechTranscriber(locale: supportedLocale, preset: .progressiveTranscription)
         try await Self.prepareModel(for: transcriber, onPreparingModel: onPreparingModel)
 
-        let audioEngine = AVAudioEngine()
-        try AudioInputDevice.useCurrentDefault(for: audioEngine)
-        let inputNode = audioEngine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw VoiceRecognitionFailure(failure: .microphoneUnavailable)
-        }
+        let capture = try await AudioCapture.open()
+        let inputFormat = capture.inputFormat
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [transcriber], considering: inputFormat) else {
+            capture.stop()
             throw VoiceRecognitionFailure(failure: .other("音声の形式を決められません"))
         }
         let converter: AVAudioConverter?
@@ -58,6 +54,7 @@ final class TranscriberRecognition {
             converter = nil
         } else {
             guard let made = AVAudioConverter(from: inputFormat, to: analyzerFormat) else {
+                capture.stop()
                 throw VoiceRecognitionFailure(failure: .other("音声の形式を変換できません"))
             }
             converter = made
@@ -69,6 +66,7 @@ final class TranscriberRecognition {
         do {
             try await analyzer.start(inputSequence: stream)
         } catch {
+            capture.stop()
             continuation.finish()
             throw VoiceRecognitionFailure(failure: .other("認識を始められません: \(error.localizedDescription)"))
         }
@@ -94,16 +92,14 @@ final class TranscriberRecognition {
         }
 
         let tapBlock = Self.makeTapBlock(converter: converter, outputFormat: analyzerFormat, continuation: continuation, onLevel: onLevel)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat, block: tapBlock)
-        audioEngine.prepare()
         do {
-            try audioEngine.start()
+            try await capture.start(tap: tapBlock)
         } catch {
-            inputNode.removeTap(onBus: 0)
+            capture.stop()
             recognition.cancel()
-            throw VoiceRecognitionFailure(failure: .other("録音を始められません: \(error.localizedDescription)"))
+            throw error
         }
-        recognition.audioEngine = audioEngine
+        recognition.capture = capture
         return recognition
     }
 
@@ -210,11 +206,7 @@ final class TranscriberRecognition {
     }
 
     private func stopAudio() {
-        guard let audioEngine = self.audioEngine else {
-            return
-        }
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        self.audioEngine = nil
+        self.capture?.stop()
+        self.capture = nil
     }
 }

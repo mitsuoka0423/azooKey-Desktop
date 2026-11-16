@@ -26,6 +26,8 @@ public struct VoiceInputSession: Sendable, Equatable {
         case modelUnavailable
         /// 録音に使える入力機器（マイク）が見つからない
         case microphoneUnavailable
+        /// マイクの準備が決まった時間のうちに終わらない（OS の録音の仕組みが応答しない）
+        case microphoneNotResponding
         /// そのほかの失敗（録音の開始に失敗した、認識が途中で止まった、など）
         case other(String)
 
@@ -36,7 +38,7 @@ public struct VoiceInputSession: Sendable, Equatable {
                 URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
             case .speechRecognitionDenied:
                 URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
-            case .onDeviceRecognitionUnavailable, .modelUnavailable, .microphoneUnavailable, .other:
+            case .onDeviceRecognitionUnavailable, .modelUnavailable, .microphoneUnavailable, .microphoneNotResponding, .other:
                 nil
             }
         }
