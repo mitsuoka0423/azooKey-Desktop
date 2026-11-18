@@ -36,6 +36,8 @@ public final class SegmentsManager {
     }
 
     public weak var delegate: (any SegmentManagerDelegate)?
+    /// 確定したときに、変換の記録（入力記録）を受け取る。記録しないときは nil のままにする
+    public var onConversionCommitted: ((InputJournal.ConversionEntry) -> Void)?
     private let kanaKanjiConverter: KanaKanjiConverter
     private let conversionSessionID: KanaKanjiConverter.ConversionSessionID
 
@@ -657,6 +659,25 @@ public final class SegmentsManager {
 
     /// - note: 画面更新との整合性を保つため、この関数の実行前に左文脈を取得し、これを引数として与える
     @MainActor public func prefixCandidateCommited(_ candidate: Candidate, leftSideContext: String) {
+        self.recordConversion(
+            reading: candidate.data.map(\.ruby).joined(),
+            text: candidate.text,
+            leftContext: leftSideContext,
+            commit: .candidate
+        )
+        self.completePrefixCandidate(candidate, leftSideContext: leftSideContext)
+    }
+
+    /// 変換の記録を渡す
+    private func recordConversion(reading: String, text: String, leftContext: String?, commit: InputJournal.ConversionEntry.Commit) {
+        guard let onConversionCommitted,
+              let entry = InputJournal.conversionEntry(reading: reading, text: text, leftContext: leftContext, commit: commit, at: self.context.now()) else {
+            return
+        }
+        onConversionCommitted(entry)
+    }
+
+    @MainActor private func completePrefixCandidate(_ candidate: Candidate, leftSideContext: String) {
         self.withConverter { $0.setCompletedData(candidate) }
         self.withConverter { $0.updateLearningData(candidate) }
         self.composingText.prefixComplete(composingCount: candidate.composingCount)
@@ -917,9 +938,12 @@ public final class SegmentsManager {
     public func commitMarkedText(inputState: InputState) -> String {
         let markedText = self.getCurrentMarkedText(inputState: inputState)
         let text = markedText.reduce(into: "") {$0.append(contentsOf: $1.content)}
+        let reading = self.composingText.convertTarget
+        let leftContext = self.onConversionCommitted == nil ? nil : self.getCleanLeftSideContext(maxCount: InputJournal.leftContextMaxCount)
         if let candidate = self.candidates?.first(where: {$0.text == text}) {
-            self.prefixCandidateCommited(candidate, leftSideContext: "")
+            self.completePrefixCandidate(candidate, leftSideContext: "")
         }
+        self.recordConversion(reading: reading, text: text, leftContext: leftContext, commit: .whole)
         self.stopComposition()
         return text
     }

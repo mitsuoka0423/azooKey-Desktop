@@ -154,6 +154,7 @@ extension azooKeyMacInputController {
             case .clearMarkedText:
                 self.setVoiceInputMarkedText(VoiceInlineText(), client: client)
             case .commit(let text):
+                self.recordVoiceCommit(text)
                 client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             case .report(let failure):
                 self.segmentsManager.appendDebugMessage("Voice input failed: \(failure)")
@@ -190,6 +191,20 @@ extension azooKeyMacInputController {
             selectionRange: NSRange(location: attributed.length, length: 0),
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
+    }
+
+    /// 音声の記録（入力記録）を残す。前の文は、確定する前に読む
+    @MainActor
+    private func recordVoiceCommit(_ text: String) {
+        guard InputJournalRecorder.isRecording else {
+            return
+        }
+        let engine = Config.VoiceRecognitionEngine().value.resolved(speechTranscriberAvailable: VoiceRecognizer.isSpeechTranscriberAvailable)
+        let leftContext = self.segmentsManager.getCleanLeftSideContext(maxCount: InputJournal.leftContextMaxCount)
+        guard let entry = InputJournal.voiceEntry(text: text, engine: engine.rawValue, leftContext: leftContext, at: Date()) else {
+            return
+        }
+        InputJournalRecorder.record(entry)
     }
 
     // MARK: - 聞き取りピル
