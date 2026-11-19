@@ -20,6 +20,7 @@ struct ConfigWindow: View {
     @ConfigState private var openAiModelName = Config.OpenAiModelName()
     @ConfigState private var openAiApiEndpoint = Config.OpenAiApiEndpoint()
     @ConfigState private var learning = Config.Learning()
+    @ConfigState private var keepInputJournal = Config.KeepInputJournal()
     @ConfigState private var inferenceLimit = Config.ZenzaiInferenceLimit()
     @ConfigState private var debugWindow = Config.DebugWindow()
     @ConfigState private var debugPredictiveTyping = Config.DebugPredictiveTyping()
@@ -38,6 +39,8 @@ struct ConfigWindow: View {
     @State private var connectionTestResult: String?
     @State private var systemUserDictionaryUpdateMessage: SystemUserDictionaryUpdateMessage?
     @State private var showingLearningResetConfirmation = false
+    @State private var showingInputJournalDeleteConfirmation = false
+    @State private var inputJournalDeleted = false
     @State private var learningResetMessage: LearningResetMessage?
     @State private var foundationModelsAvailability: FoundationModelsAvailability?
     @State private var availabilityCheckDone = false
@@ -189,6 +192,27 @@ struct ConfigWindow: View {
             NSWorkspace.shared.activateFileViewerSelecting([self.azooKeyApplicationSupportDirectoryURL])
         } catch {
             // no-op
+        }
+    }
+
+    @MainActor
+    private func openInputJournalDirectoryInFinder() {
+        let url = InputJournalRecorder.store.directoryURL
+        do {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            // no-op
+        }
+    }
+
+    @MainActor
+    private func deleteInputJournal() {
+        InputJournalRecorder.store.deleteAll()
+        inputJournalDeleted = true
+        Task {
+            try? await Task.sleep(for: .seconds(10))
+            inputJournalDeleted = false
         }
     }
 
@@ -599,6 +623,43 @@ struct ConfigWindow: View {
                 }
             } header: {
                 Label("学習", systemImage: "memorychip")
+            }
+
+            Section {
+                Toggle("入力記録を残す", isOn: $keepInputJournal)
+                LabeledContent {
+                    HStack {
+                        if inputJournalDeleted {
+                            Text("入力記録を消しました")
+                                .foregroundColor(.green)
+                        }
+                        Spacer()
+                        Button("フォルダを開く") {
+                            openInputJournalDirectoryInFinder()
+                        }
+                        Button("消す") {
+                            showingInputJournalDeleteConfirmation = true
+                        }
+                        .confirmationDialog(
+                            "入力記録をすべて消しますか？",
+                            isPresented: $showingInputJournalDeleteConfirmation,
+                            titleVisibility: .visible
+                        ) {
+                            Button("消す", role: .destructive) {
+                                deleteInputJournal()
+                            }
+                            Button("キャンセル", role: .cancel) {}
+                        } message: {
+                            Text("消した記録は元に戻せません。")
+                        }
+                    }
+                } label: {
+                    Text("記録")
+                }
+            } header: {
+                Label("入力記録", systemImage: "doc.text")
+            } footer: {
+                Text("確定した読みと表記の組（変換の記録）と、音声入力で確定した文（音声の記録）を、この Mac の中のファイルに残します。どこにも送りません。変換や音声認識を自分好みに育てる材料に使います。パスワードの入力中は残しません。")
             }
 
             Section {

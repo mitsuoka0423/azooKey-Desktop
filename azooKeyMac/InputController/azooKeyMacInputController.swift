@@ -171,6 +171,10 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.updateTransformSelectedTextMenuItemEnabledState()
         self.updateVoiceInputMenuItem()
         self.updateSoftwareUpdateMenuItem()
+        // 入力記録：設定がオンのときだけ受け取る（オフのときは前の文を問い合わせない）
+        self.segmentsManager.onConversionCommitted = Config.KeepInputJournal().value ? { entry in
+            InputJournalRecorder.record(entry)
+        } : nil
         // ピン留めプロンプトのキャッシュを更新
         self.reloadPinnedPromptsCache()
         self.segmentsManager.activate()

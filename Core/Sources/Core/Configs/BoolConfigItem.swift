@@ -56,6 +56,12 @@ extension Config {
         static let `default` = true
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableDateTimeCandidates"
     }
+    /// 入力記録（確定した読みと表記、音声入力で確定した文）を手元に残す設定
+    public struct KeepInputJournal: BoolConfigItem {
+        public init() {}
+        static let `default` = false
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.keepInputJournal"
+    }
     /// ショートカットやメニューから音声入力を使う設定
     public struct VoiceInput: BoolConfigItem {
         public init() {}
