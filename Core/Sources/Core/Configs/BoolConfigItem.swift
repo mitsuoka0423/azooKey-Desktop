@@ -56,6 +56,12 @@ extension Config {
         static let `default` = true
         public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableDateTimeCandidates"
     }
+    /// 日本語と英語が混ざった入力で、英単語の部分を英字のまま残す（英字の見分け）設定。変換パネルを使うときだけ効く
+    public struct MixedInputDetection: BoolConfigItem {
+        public init() {}
+        static let `default` = true
+        public static let key: String = "dev.ensan.inputmethod.azooKeyMac.preference.enableMixedInputDetection"
+    }
     /// 入力記録（確定した読みと表記、音声入力で確定した文）を手元に残す設定
     public struct KeepInputJournal: BoolConfigItem {
         public init() {}

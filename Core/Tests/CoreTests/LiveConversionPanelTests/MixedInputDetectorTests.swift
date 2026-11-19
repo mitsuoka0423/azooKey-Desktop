@@ -168,6 +168,16 @@ struct MixedInputConversionTests {
         #expect(manager.getLiveConversionClauses().map(\.surface).joined() == "この入力をdeployする")
     }
 
+    @Test("英単語の判定を外すと（英字の見分けがオフ）、英単語もローマ字として読む")
+    func detectionOff() {
+        let manager = Self.manager()
+        manager.englishWordChecker = nil
+        Self.type(manager, "kononyuuryokuwodeploysuru")
+        let reading = manager.getLiveConversionClauses().map(\.reading).joined()
+        #expect(!reading.contains("deploy"))
+        #expect(reading.hasPrefix("このにゅうりょくをで"))
+    }
+
     @Test("日本語だけの文は今までどおり")
     func japaneseOnly() {
         let manager = Self.manager()

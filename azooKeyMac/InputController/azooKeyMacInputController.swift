@@ -156,7 +156,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.candidatesViewController.delegate = self
         self.replaceSuggestionsViewController.delegate = self
         self.segmentsManager.delegate = self
-        self.segmentsManager.englishWordChecker = SpellCheckerEnglishWordChecker()
+        self.updateEnglishWordChecker()
         self.setupMenu()
     }
 
@@ -171,6 +171,7 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
         self.updateTransformSelectedTextMenuItemEnabledState()
         self.updateVoiceInputMenuItem()
         self.updateSoftwareUpdateMenuItem()
+        self.updateEnglishWordChecker()
         // 入力記録：設定がオンのときだけ受け取る（オフのときは前の文を問い合わせない）
         self.segmentsManager.onConversionCommitted = Config.KeepInputJournal().value ? { entry in
             InputJournalRecorder.record(entry)
@@ -844,6 +845,16 @@ class azooKeyMacInputController: IMKInputController, NSMenuItemValidation { // s
             selectionRange: currentMarkedText.selectionRange,
             replacementRange: NSRange(location: NSNotFound, length: 0)
         )
+    }
+
+    /// 英字の見分けの設定に合わせて、英単語の判定を付け外しする（外すと見分けをしない）
+    private func updateEnglishWordChecker() {
+        let enabled = Config.MixedInputDetection().value
+        if enabled, self.segmentsManager.englishWordChecker == nil {
+            self.segmentsManager.englishWordChecker = SpellCheckerEnglishWordChecker()
+        } else if !enabled, self.segmentsManager.englishWordChecker != nil {
+            self.segmentsManager.englishWordChecker = nil
+        }
     }
 
     @MainActor
