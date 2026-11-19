@@ -14,4 +14,10 @@ struct LiveConversionPanelConfigTests {
         #expect(Config.LiveConversionPanel.key != Config.LiveConversion.key)
         #expect(Config.LiveConversionPanel.key.hasSuffix(".preference.enableLiveConversionPanel"))
     }
+
+    @Test("英字の見分けは既定でオン")
+    func mixedInputDetectionDefaultIsOn() {
+        #expect(Config.MixedInputDetection.default == true)
+        #expect(Config.MixedInputDetection.key.hasSuffix(".preference.enableMixedInputDetection"))
+    }
 }
